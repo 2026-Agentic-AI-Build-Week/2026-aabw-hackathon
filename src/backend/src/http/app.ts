@@ -12,15 +12,9 @@ export function createAuthApplication(dependencies: AuthServiceDependencies, pri
   const auth = new AuthService(dependencies);
   const orders = prisma ? new OrderService(prisma) : undefined;
   return {
-<<<<<<< HEAD
     async listen(port, host = "127.0.0.1") {
-      const server = createServer((request, response) => void handle(request, response, service));
-      await new Promise<void>((resolve) => server.listen(port, host, resolve));
-=======
-    async listen(port) {
       const server = createServer((request, response) => void handle(request, response, auth, orders));
-      await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
->>>>>>> 999189a5bf9d044ac430655b8fea2f735800213b
+      await new Promise<void>((resolve) => server.listen(port, host, resolve));
       const address = server.address();
       if (!address || typeof address === "string") throw new Error("Server did not bind to a TCP port.");
       return { close: () => close(server), request: (path, options = {}) => fetch(`http://127.0.0.1:${address.port}${path}`, { method: options.method ?? "GET", headers: { ...(options.body === undefined ? {} : { "content-type": "application/json" }), ...options.headers }, body: options.body === undefined ? undefined : JSON.stringify(options.body) }) };
