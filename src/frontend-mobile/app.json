@@ -1,0 +1,19 @@
+{
+  "expo": {
+    "name": "KFC Conversational Ordering",
+    "slug": "kfc-conversational-ordering",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "android": {
+      "package": "com.aabw.kfcordering"
+    },
+    "ios": {
+      "bundleIdentifier": "com.aabw.kfcordering",
+      "supportsTablet": true
+    }
+  }
+}
