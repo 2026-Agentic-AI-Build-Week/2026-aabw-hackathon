@@ -2,7 +2,7 @@
 
 ## 1. Mục tiêu và kiến trúc
 
-Xây dựng Mobile App tiếng Việt cho phép khách hàng:
+Xây dựng Mobile App English-first cho phép khách hàng:
 
 - Tìm món, hỏi giá và tùy chọn món bằng text hoặc voice note.
 - Thêm, sửa, xóa và xem giỏ hàng.
@@ -84,19 +84,19 @@ Mobile App render response động gồm message, quick replies, Cart Card và O
 ```json
 {
   "session_id": "uuid",
-  "message": "Cho tôi 2 phần gà",
+  "message": "Add two pieces of fried chicken",
   "voice_base64": "optional-base64-audio",
   "idempotency_key": "uuid"
 }
 ```
 
-- `message` hoặc `voice_base64` là bắt buộc. Nếu có voice, backend kiểm tra format và dung lượng, transcription sang text tiếng Việt, sau đó chạy cùng pipeline như text.
+- `message` hoặc `voice_base64` là bắt buộc. Nếu có voice, backend kiểm tra format và dung lượng, transcription sang tiếng Anh, sau đó chạy cùng pipeline như text.
 - Response trả:
 
 ```json
 {
-  "message": "Đã thêm 2 phần gà vào giỏ.",
-  "transcript": "Cho tôi 2 phần gà",
+  "message": "I've added two pieces of fried chicken to your cart.",
+  "transcript": "Add two pieces of fried chicken",
   "cart": {},
   "quick_replies": [],
   "order_status": null,
@@ -141,7 +141,7 @@ Mock service cung cấp menu, modifier, hồ sơ khách hàng, voucher, điểm 
 
 ### Quy tắc hội thoại
 
-- Ưu tiên tiếng Việt tự nhiên; hiểu tên món gần đúng, viết tắt và không dấu.
+- Ưu tiên tiếng Anh tự nhiên; hiểu tên món gần đúng, cách diễn đạt hội thoại và viết tắt phổ biến.
 - Nếu có nhiều món phù hợp, bot hỏi lại thay vì tự chọn.
 - Mọi giá, giảm giá, điểm và tổng tiền phải xuất phát từ tool result.
 - Trước khi tạo đơn, bot hiển thị món, số lượng, giá, voucher, tổng tiền, người nhận và địa chỉ rồi yêu cầu xác nhận rõ ràng.
