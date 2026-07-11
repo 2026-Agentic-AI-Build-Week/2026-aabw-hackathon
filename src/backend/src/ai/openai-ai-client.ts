@@ -1,7 +1,9 @@
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
 import type { ChatAi, ChatAiInput } from "./ai-client.js";
-import { shouldSearchMenu, type MenuSearch } from "./menu-search.js";
+import type { MenuIntent } from "./menu-intent.js";
+import type { MenuResponder } from "./ordering-agent.js";
+import type { MenuSearch, MenuSearchResult } from "./menu-search.js";
 
 const instructions = `You are KFC Ordering Assistant, a professional and friendly restaurant staff member.
 
@@ -37,7 +39,7 @@ const menuSearchTool: ChatCompletionTool = {
   },
 };
 
-export class OpenAiClient implements ChatAi {
+export class OpenAiClient implements ChatAi, MenuResponder {
   private readonly client: OpenAI;
 
   constructor(apiKey: string, baseUrl: string, private readonly model: string, private readonly maxOutputTokens: number, private readonly menuSearch: MenuSearch) {
@@ -45,13 +47,19 @@ export class OpenAiClient implements ChatAi {
   }
 
   async respond(input: ChatAiInput): Promise<string> {
-    const messages = buildConversationMessages(input);
-    const menuIntent = shouldSearchMenu(input.text);
+    const results = await this.menuSearch.search(input.text);
+    return this.generate(input, { action: "SEARCH_ITEM", foodQuery: input.text, categoryQuery: null, itemType: null, quantity: null, preferences: [], referencedSelection: null, needsClarification: false, clarificationQuestion: null }, results);
+  }
+
+  async generate(input: ChatAiInput, intent: MenuIntent, results: MenuSearchResult[]): Promise<string> {
+    const menuContext = results.length === 0 ? "No matching available menu items were found." : JSON.stringify(results.slice(0, 8));
+    const messages = [...buildConversationMessages(input), { role: "system" as const, content: `Validated intent: ${JSON.stringify(intent)}. Authoritative menu search results: ${menuContext}. Use only these results for names, prices, and availability.` }];
+    const hasResults = results.length > 0;
     const first = await this.client.chat.completions.create({
       model: this.model,
       messages,
       tools: [menuSearchTool],
-      tool_choice: menuIntent ? { type: "function", function: { name: "search_menu" } } : "auto",
+      tool_choice: hasResults ? "none" : "auto",
       max_tokens: this.maxOutputTokens,
     });
     const assistant = first.choices[0]?.message;

@@ -5,6 +5,9 @@ import { PrismaAuthRepository } from "./auth/prisma-auth-repository.js";
 import { TokenService } from "./auth/token-service.js";
 import { DemoAiClient } from "./ai/demo-ai-client.js";
 import { OpenAiClient } from "./ai/openai-ai-client.js";
+import { OpenAiMenuIntentExtractor } from "./ai/menu-intent-extractor.js";
+import { OrderingAgent } from "./ai/ordering-agent.js";
+import { PrismaOrderDraftStore } from "./ai/prisma-order-draft-store.js";
 import { PrismaMenuSearch } from "./ai/menu-search.js";
 import { loadAiConfig } from "./config/ai-config.js";
 import { loadAuthConfig } from "./config/auth-config.js";
@@ -16,7 +19,10 @@ const config = loadAuthConfig();
 const aiConfig = loadAiConfig();
 const prisma = new PrismaClient();
 const menuSearch = new PrismaMenuSearch(prisma);
-const ai = aiConfig.useDemoFallback ? new DemoAiClient(menuSearch) : new OpenAiClient(aiConfig.apiKey!, aiConfig.baseUrl, aiConfig.modelName, aiConfig.maxOutputTokens, menuSearch);
+const ai = aiConfig.useDemoFallback ? new DemoAiClient(menuSearch) : (() => {
+  const responder = new OpenAiClient(aiConfig.apiKey!, aiConfig.baseUrl, aiConfig.modelName, aiConfig.maxOutputTokens, menuSearch);
+  return new OrderingAgent(new OpenAiMenuIntentExtractor(aiConfig.apiKey!, aiConfig.baseUrl, aiConfig.modelName, aiConfig.maxOutputTokens), menuSearch, responder, new PrismaOrderDraftStore(prisma));
+})();
 const application = createAuthApplication(
   { repository: new PrismaAuthRepository(prisma), hasher: new PasswordHasher(config.tokenPepper), tokens: new TokenService(config.accessTokenSecret, config.refreshTokenSecret, config.accessTokenTtlSeconds, config.refreshTokenTtlSeconds) },
   prisma,

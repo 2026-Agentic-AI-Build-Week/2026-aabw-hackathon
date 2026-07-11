@@ -367,6 +367,7 @@ model ConversationSession {
   businessState        BusinessState         @default(BROWSING) @map("business_state")
   openaiConversationId String?               @map("openai_conversation_id")
   lastActivityAt       DateTime              @default(now()) @map("last_activity_at") @db.Timestamptz(3)
+  draftState           Json                  @default("{}") @map("draft_state")
   createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt            DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
   user                 User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
