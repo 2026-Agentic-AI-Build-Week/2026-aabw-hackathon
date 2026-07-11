@@ -18,13 +18,6 @@ enum Channel {
   MESSENGER
 }
 
-enum OtpStatus {
-  PENDING
-  VERIFIED
-  EXPIRED
-  LOCKED
-}
-
 enum LoyaltyAccountStatus {
   ACTIVE
   SUSPENDED
@@ -208,6 +201,7 @@ model MenuItemModifierGroup {
 model User {
   id                  String                 @id @default(uuid()) @db.Uuid
   email               String                 @unique
+  passwordHash        String                 @map("password_hash")
   phone               String
   phoneNormalized     String                 @unique @map("phone_normalized")
   displayName         String                 @map("display_name")
@@ -218,7 +212,6 @@ model User {
   updatedAt           DateTime               @updatedAt @map("updated_at") @db.Timestamptz(3)
   identities          UserIdentity[]
   addresses           UserAddress[]
-  otpChallenges       OtpChallenge[]
   loyaltyAccount      LoyaltyAccount?
   loyaltyTransactions LoyaltyTransaction[]
   voucherCodes        VoucherCode[]
@@ -228,9 +221,27 @@ model User {
   orders              Order[]
   handoffs            Handoff[]
   auditLogs           AuditLog[]
+  authDeviceSessions  AuthDeviceSession[]
 
   @@index([status])
   @@map("users")
+}
+
+model AuthDeviceSession {
+  id               String    @id @default(uuid()) @db.Uuid
+  userId           String    @map("user_id") @db.Uuid
+  deviceId         String    @map("device_id")
+  refreshTokenHash String    @map("refresh_token_hash")
+  expiresAt        DateTime  @map("expires_at") @db.Timestamptz(3)
+  revokedAt        DateTime? @map("revoked_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceId])
+  @@index([refreshTokenHash])
+  @@index([expiresAt])
+  @@map("auth_device_sessions")
 }
 
 model UserIdentity {
@@ -265,23 +276,6 @@ model UserAddress {
 
   @@index([userId, isDefault])
   @@map("user_addresses")
-}
-
-model OtpChallenge {
-  id              String    @id @default(uuid()) @db.Uuid
-  userId          String?   @map("user_id") @db.Uuid
-  phoneNormalized String    @map("phone_normalized")
-  otpHash         String    @map("otp_hash")
-  expiresAt       DateTime  @map("expires_at") @db.Timestamptz(3)
-  attemptCount    Int       @default(0) @map("attempt_count")
-  maxAttempts     Int       @default(5) @map("max_attempts")
-  verifiedAt      DateTime? @map("verified_at") @db.Timestamptz(3)
-  status          OtpStatus @default(PENDING)
-  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  user            User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([phoneNormalized, status, expiresAt])
-  @@map("otp_challenges")
 }
 
 model LoyaltyAccount {

@@ -10,11 +10,11 @@ Update this guide and `README.md` whenever the layout or primary entry point cha
 
 The database toolchain uses PostgreSQL 16 in Docker, Prisma ORM, TypeScript, and Vitest. Use the documented command set:
 
-- `make -C src/backend run` — start PostgreSQL locally.
-- `make -C src/backend test` — run the complete backend test suite.
-- `make -C src/backend lint` — check TypeScript and Prisma schema rules.
-- `make -C src/backend db-migrate-dev` — create and apply development migrations.
-- `make -C src/backend db-seed` — import catalog and demo business data.
+- `docker compose --env-file src/backend/.env -f src/backend/docker-compose.yml up -d` — start PostgreSQL locally.
+- `npm --prefix src/backend test` — run the complete backend test suite.
+- `npm --prefix src/backend run lint` — check TypeScript and Prisma schema rules.
+- `npm --prefix src/backend run db:migrate:dev` — create and apply development migrations.
+- `npm --prefix src/backend run db:seed` — import catalog and demo business data.
 
 Dependencies are pinned in `src/backend/package.json`. Do not assume globally installed Prisma or TypeScript tooling.
 

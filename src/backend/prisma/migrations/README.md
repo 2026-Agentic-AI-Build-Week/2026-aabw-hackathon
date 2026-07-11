@@ -1,6 +1,6 @@
 # Prisma migrations
 
-Run `make -C src/backend db-migrate-dev` from the repository root after starting
-PostgreSQL to generate migrations from `src/backend/prisma/schema.prisma`.
+After starting PostgreSQL, run `npm run db:migrate:dev` from `src/backend` to
+generate migrations from `src/backend/prisma/schema.prisma`.
 Commit the generated migration directory. Deployment environments apply
-committed migrations with `make -C src/backend db-migrate`.
+committed migrations with `npm run db:migrate` from `src/backend`.

@@ -3,6 +3,7 @@ import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 
 import catalog from "../../../assets/data/kfc_catalog.json" with { type: "json" };
+import { PasswordHasher } from "../src/auth/password-hasher.js";
 import { normalizeEmail, normalizeVietnamPhone } from "../src/lib/normalization.js";
 
 const prisma = new PrismaClient();
@@ -11,9 +12,7 @@ const day = 24 * 60 * 60 * 1000;
 
 type CatalogItem = (typeof catalog.items)[number];
 
-function stableOtpHash(phoneNormalized: string): string {
-  return `demo-sha256:${Buffer.from(`${phoneNormalized}:123456`).toString("base64")}`;
-}
+const passwordHasher = new PasswordHasher(process.env.AUTH_TOKEN_PEPPER ?? "development-token-pepper-change-me-00000000");
 
 async function seedCatalog() {
   const categoryIds = new Map<string, string>();
@@ -125,6 +124,7 @@ async function upsertUser(input: {
   email: string;
   phone: string;
   displayName: string;
+  password: string;
   isPhoneVerified: boolean;
   status?: "ACTIVE" | "BLOCKED";
 }) {
@@ -137,6 +137,7 @@ async function upsertUser(input: {
       phone: input.phone,
       phoneNormalized,
       displayName: input.displayName,
+      passwordHash: passwordHasher.hashPassword(input.password),
       status: input.status ?? "ACTIVE",
       phoneVerifiedAt: input.isPhoneVerified ? now : null,
     },
@@ -145,6 +146,7 @@ async function upsertUser(input: {
       phone: input.phone,
       phoneNormalized,
       displayName: input.displayName,
+      passwordHash: passwordHasher.hashPassword(input.password),
       status: input.status ?? "ACTIVE",
       phoneVerifiedAt: input.isPhoneVerified ? now : null,
     },
@@ -156,18 +158,21 @@ async function seedUsers() {
     email: "customer1@example.com",
     phone: "0901 234 567",
     displayName: "Nguyễn An",
+    password: "DemoPassword123!",
     isPhoneVerified: true,
   });
   const unverifiedUser = await upsertUser({
     email: "customer2@example.com",
     phone: "0902 345 678",
     displayName: "Trần Bình",
+    password: "DemoPassword123!",
     isPhoneVerified: false,
   });
   const blockedUser = await upsertUser({
     email: "blocked@example.com",
     phone: "0903 456 789",
     displayName: "Lê Cường",
+    password: "DemoPassword123!",
     isPhoneVerified: true,
     status: "BLOCKED",
   });
@@ -215,18 +220,6 @@ async function seedUsers() {
       balanceAfter: 250,
       reason: "SEED_OPENING_BALANCE",
       idempotencyKey: "seed-loyalty-customer-1-opening",
-    },
-  });
-
-  await prisma.otpChallenge.upsert({
-    where: { id: "00000000-0000-4000-8000-000000000010" },
-    update: { userId: unverifiedUser.id, status: "PENDING", expiresAt: new Date(now.getTime() + day) },
-    create: {
-      id: "00000000-0000-4000-8000-000000000010",
-      userId: unverifiedUser.id,
-      phoneNormalized: unverifiedUser.phoneNormalized,
-      otpHash: stableOtpHash(unverifiedUser.phoneNormalized),
-      expiresAt: new Date(now.getTime() + day),
     },
   });
 

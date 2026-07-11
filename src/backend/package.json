@@ -9,6 +9,8 @@
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:reset": "prisma migrate reset --force",
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
     "lint": "tsc --noEmit && prisma validate",
     "test": "vitest run"
   },
@@ -27,4 +29,3 @@
     "vitest": "3.2.4"
   }
 }
-
