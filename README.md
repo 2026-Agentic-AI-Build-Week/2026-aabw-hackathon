@@ -95,25 +95,32 @@ demo; leave it blank to use the deterministic local KFC assistant.
 Choose the AI provider only in `src/backend/.env`:
 
 ```dotenv
-# Direct OpenAI
-AI_PROVIDER=openai
-AI_API_KEY=sk-...
-AI_MODEL_NAME=gpt-4.1-mini
+# Recommended OpenRouter / Qwen configuration for the intent-search agent
+AI_PROVIDER=openrouter
+AI_API_KEY=sk-or-v1-...
+AI_MODEL_NAME=qwen/qwen3-30b-a3b-instruct-2507
 AI_MAX_OUTPUT_TOKENS=1024
 
-# Or OpenRouter
-# AI_PROVIDER=openrouter
-# AI_API_KEY=sk-or-v1-...
-# AI_MODEL_NAME=google/gemini-2.5-flash
-# AI_MAX_OUTPUT_TOKENS=1024
-
-# Recommended Qwen configuration for the intent/search agent
-# AI_PROVIDER=openrouter
-# AI_MODEL_NAME=qwen/qwen3-30b-a3b-instruct-2507
+# Direct OpenAI remains supported
+# AI_PROVIDER=openai
+# AI_MODEL_NAME=gpt-4.1-mini
 ```
 
 Restart the backend after changing providers or models. Never add the AI key to
 an `EXPO_PUBLIC_*` variable because those values are bundled into the mobile app.
+
+### Intent-driven menu search
+
+The realtime agent extracts a structured menu intent before searching.
+PostgreSQL ranks only available, in-stock items using weighted full-text search
+over item name, slug, type, and description, expands matching categories, and
+falls back to trigram similarity for typos. Apply the committed migration before
+running the backend against a database:
+
+```bash
+npm --prefix src/backend run db:migrate
+npm --prefix src/backend run db:seed
+```
 
 ### 5. Run the mobile app
 
