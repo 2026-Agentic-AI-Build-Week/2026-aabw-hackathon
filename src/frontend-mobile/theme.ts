@@ -25,6 +25,11 @@ export interface ThemeTokens {
     loginButtonDisabled: string;
     error: string;
     errorBackground: string;
+    checkoutSurface: string;
+    checkoutBorder: string;
+    checkoutAccent: string;
+    checkoutSuccess: string;
+    checkoutSuccessBackground: string;
   };
   typography: {
     title: TextStyle;
@@ -38,6 +43,10 @@ export interface ThemeTokens {
     messageStatus: TextStyle;
     loginInput: TextStyle;
     loginButton: TextStyle;
+    checkoutTitle: TextStyle;
+    checkoutBody: TextStyle;
+    checkoutAmount: TextStyle;
+    checkoutCode: TextStyle;
   };
   spacing: {
     xs: number;
@@ -75,6 +84,8 @@ export interface ThemeTokens {
     loginContentOffset: number;
     androidSystemBarFallbackInset: number;
     androidSystemBarMaximumInset: number;
+    checkoutCardMaximumViewportRatio: number;
+    checkoutItemsMaximumViewportRatio: number;
     listItemVerticalPadding: number;
     bottomPadding: number;
   };
@@ -107,6 +118,11 @@ export const theme: ThemeTokens = {
     loginButtonDisabled: '#93C5FD',
     error: '#BA1A1A',
     errorBackground: '#FFDAD6',
+    checkoutSurface: '#FFF7F5',
+    checkoutBorder: '#F0B8B1',
+    checkoutAccent: '#A30D18',
+    checkoutSuccess: '#0A6E3B',
+    checkoutSuccessBackground: '#DDF7E7',
   },
   typography: {
     title: {
@@ -177,6 +193,31 @@ export const theme: ThemeTokens = {
       lineHeight: 20,
       fontWeight: '500',
     },
+    checkoutTitle: {
+      fontFamily,
+      fontSize: 16,
+      lineHeight: 22,
+      fontWeight: '700',
+    },
+    checkoutBody: {
+      fontFamily,
+      fontSize: 13,
+      lineHeight: 18,
+      fontWeight: '400',
+    },
+    checkoutAmount: {
+      fontFamily,
+      fontSize: 15,
+      lineHeight: 20,
+      fontWeight: '700',
+    },
+    checkoutCode: {
+      fontFamily,
+      fontSize: 14,
+      lineHeight: 20,
+      fontWeight: '700',
+      letterSpacing: 0.7,
+    },
   },
   spacing: {
     xs: 4,
@@ -214,6 +255,8 @@ export const theme: ThemeTokens = {
     loginContentOffset: 64,
     androidSystemBarFallbackInset: 12,
     androidSystemBarMaximumInset: 24,
+    checkoutCardMaximumViewportRatio: 0.42,
+    checkoutItemsMaximumViewportRatio: 0.18,
     listItemVerticalPadding: 10,
     bottomPadding: 20,
   },

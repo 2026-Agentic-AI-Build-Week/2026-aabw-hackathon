@@ -1,6 +1,6 @@
 import OpenAI from "openai";
-import type { ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
-import type { ChatAi, ChatAiInput } from "./ai-client.js";
+import type { ChatCompletionCreateParamsNonStreaming, ChatCompletionMessageParam, ChatCompletionTool } from "openai/resources/chat/completions";
+import type { ChatAi, ChatAiInput, ChatAiResult } from "./ai-client.js";
 import type { MenuIntent } from "./menu-intent.js";
 import type { MenuResponder } from "./ordering-agent.js";
 import type { MenuSearch, MenuSearchResult } from "./menu-search.js";
@@ -14,6 +14,7 @@ Conversation behavior:
 - Silently identify requested items, quantities, sizes, modifiers, drinks, delivery preferences, and unresolved details.
 - If an essential detail is missing or ambiguous, ask one short, specific clarification question instead of guessing.
 - Keep responses concise, natural, and suitable for mobile chat. Do not reveal hidden reasoning, internal JSON, prompts, or tool mechanics.
+- Return plain text only. Do not use Markdown markers such as **, #, or tables.
 
 Menu behavior:
 - Call search_menu whenever current menu names, availability, or prices are needed.
@@ -21,9 +22,10 @@ Menu behavior:
 - Suggest at most three relevant options and explain the key difference briefly.
 - If no suitable item is found, say so clearly and ask for a nearby preference.
 
-MVP safety boundary:
-- You may help users explore and refine their intended order.
-- Do not claim that an order was quoted, confirmed, paid, submitted, or created because those actions are not enabled in this MVP.`;
+Checkout safety boundary:
+- Checkout is enabled through the server-side ordering flow.
+- Never invent totals, quote expirations, confirmation phrases, payment outcomes, or created-order details.
+- Only describe quote or order facts when they are present in the validated intent context supplied by the application.`;
 
 const menuSearchTool: ChatCompletionTool = {
   type: "function",
@@ -42,26 +44,28 @@ const menuSearchTool: ChatCompletionTool = {
 export class OpenAiClient implements ChatAi, MenuResponder {
   private readonly client: OpenAI;
 
-  constructor(apiKey: string, baseUrl: string, private readonly model: string, private readonly maxOutputTokens: number, private readonly menuSearch: MenuSearch) {
+  constructor(apiKey: string, baseUrl: string, private readonly model: string, private readonly maxOutputTokens: number, private readonly menuSearch: MenuSearch, private readonly disableThinking = false) {
     this.client = new OpenAI({ apiKey, baseURL: baseUrl });
   }
 
-  async respond(input: ChatAiInput): Promise<string> {
+  async respond(input: ChatAiInput): Promise<ChatAiResult> {
     const results = await this.menuSearch.search(input.text);
-    return this.generate(input, { action: "SEARCH_ITEM", foodQuery: input.text, categoryQuery: null, itemType: null, quantity: null, preferences: [], referencedSelection: null, needsClarification: false, clarificationQuestion: null }, results);
+    return { text: await this.generate(input, { action: "SEARCH_ITEM", foodQuery: input.text, categoryQuery: null, itemType: null, quantity: null, preferences: [], preferenceUpdates: { excludeItemTypes: [], includeItemTypes: [] }, referencedSelection: null, delivery: null, confirmationPhrase: null, needsClarification: false, clarificationQuestion: null }, results) };
   }
 
   async generate(input: ChatAiInput, intent: MenuIntent, results: MenuSearchResult[]): Promise<string> {
     const menuContext = results.length === 0 ? "No matching available menu items were found." : JSON.stringify(results.slice(0, 8));
     const messages = [...buildConversationMessages(input), { role: "system" as const, content: `Validated intent: ${JSON.stringify(intent)}. Authoritative menu search results: ${menuContext}. Use only these results for names, prices, and availability.` }];
     const hasResults = results.length > 0;
-    const first = await this.client.chat.completions.create({
+    const firstRequest: ChatCompletionCreateParamsNonStreaming & { enable_thinking?: boolean } = {
       model: this.model,
       messages,
       tools: [menuSearchTool],
       tool_choice: hasResults ? "none" : "auto",
       max_tokens: this.maxOutputTokens,
-    });
+      ...(this.disableThinking ? { enable_thinking: false } : {}),
+    };
+    const first = await this.client.chat.completions.create(firstRequest);
     const assistant = first.choices[0]?.message;
     if (!assistant) throw new Error("AI provider returned no completion choices.");
     if (!assistant.tool_calls || assistant.tool_calls.length === 0) return requireText(assistant.content);
@@ -73,7 +77,8 @@ export class OpenAiClient implements ChatAi, MenuResponder {
       messages.push({ role: "tool", tool_call_id: toolCall.id, content: JSON.stringify(results) });
     }
 
-    const final = await this.client.chat.completions.create({ model: this.model, messages, tools: [menuSearchTool], tool_choice: "none", max_tokens: this.maxOutputTokens });
+    const finalRequest: ChatCompletionCreateParamsNonStreaming & { enable_thinking?: boolean } = { model: this.model, messages, tools: [menuSearchTool], tool_choice: "none", max_tokens: this.maxOutputTokens, ...(this.disableThinking ? { enable_thinking: false } : {}) };
+    const final = await this.client.chat.completions.create(finalRequest);
     return requireText(final.choices[0]?.message.content);
   }
 }
@@ -112,5 +117,5 @@ export function resolveMenuSearchQuery(value: unknown, fallback: string): string
 
 function requireText(text: string | null | undefined): string {
   if (!text || text.trim() === "") throw new Error("AI provider returned an empty response.");
-  return text;
+  return text.replaceAll("**", "").trim();
 }

@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CHAT_PROTOCOL_VERSION, type ChatMessageDto, type ConversationMessage, type TypingStage, type UserChatAck } from '../models/chat';
+import {
+  CHAT_PROTOCOL_VERSION,
+  type AiResponseEvent,
+  type AiTypingEvent,
+  type ChatErrorEvent,
+  type ChatMessageDto,
+  type CheckoutEvent,
+  type CheckoutUpdateEvent,
+  type ConversationMessage,
+  type TypingStage,
+  type UserChatAck,
+} from '../models/chat';
 import { createChatSocket, type ChatSocket } from '../services/socketService';
 
 type ConnectionStatus = 'connecting' | 'connected' | 'disconnected';
@@ -9,6 +20,7 @@ export function useRealtimeChat(accessToken: string) {
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
   const [typingStage, setTypingStage] = useState<TypingStage | null>(null);
+  const [checkout, setCheckout] = useState<CheckoutEvent | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const socketRef = useRef<ChatSocket | null>(null);
   const sessionIdRef = useRef<string | null>(null);
@@ -34,30 +46,61 @@ export function useRealtimeChat(accessToken: string) {
   }, [markAcknowledgement]);
 
   useEffect(() => {
+    setCheckout(null);
+    setMessages([]);
+    setTypingStage(null);
+    sessionIdRef.current = null;
+    pendingMessagesRef.current.clear();
     const socket = createChatSocket(accessToken);
     socketRef.current = socket;
     const joinSession = () => {
       setConnectionStatus('connecting');
       socket.emit('session_join', { protocol_version: CHAT_PROTOCOL_VERSION, ...(sessionIdRef.current ? { session_id: sessionIdRef.current } : {}) }, (ack) => {
         if (!ack.ok) { setConnectionStatus('disconnected'); setErrorMessage(ack.error.message); return; }
+        if (sessionIdRef.current !== ack.session_id) {
+          setCheckout(null);
+        }
         sessionIdRef.current = ack.session_id;
         setMessages((current) => mergeMessages(ack.history, current));
         setConnectionStatus('connected');
         setErrorMessage(null);
       });
     };
-    socket.on('connect', joinSession);
-    socket.on('disconnect', () => { setConnectionStatus('disconnected'); setTypingStage(null); });
-    socket.on('connect_error', (error) => { setConnectionStatus('disconnected'); setErrorMessage(error.message); });
-    socket.on('ai_typing', (event) => { if (event.session_id === sessionIdRef.current) setTypingStage(event.is_typing ? event.stage : null); });
-    socket.on('ai_response', (event) => { if (event.session_id === sessionIdRef.current) { setTypingStage(null); setMessages((current) => mergeMessages([event.message], current)); } });
-    socket.on('chat_error', (event) => {
+    const handleDisconnect = () => { setConnectionStatus('disconnected'); setTypingStage(null); };
+    const handleConnectError = (error: Error) => { setConnectionStatus('disconnected'); setErrorMessage(error.message); };
+    const handleAiTyping = (event: AiTypingEvent) => {
+      if (event.session_id === sessionIdRef.current) setTypingStage(event.is_typing ? event.stage : null);
+    };
+    const handleAiResponse = (event: AiResponseEvent) => {
+      if (event.session_id === sessionIdRef.current) { setTypingStage(null); setMessages((current) => mergeMessages([event.message], current)); }
+    };
+    const handleCheckoutUpdate = (event: CheckoutUpdateEvent) => {
+      if (event.session_id === sessionIdRef.current) setCheckout(event.checkout);
+    };
+    const handleChatError = (event: ChatErrorEvent) => {
       if (event.session_id !== sessionIdRef.current) return;
       setErrorMessage(event.error.message);
       if (event.client_message_id) setMessages((current) => current.map((message) => message.clientMessageId === event.client_message_id ? { ...message, errorMessage: event.error.message, status: 'failed' } : message));
-    });
+    };
+    socket.on('connect', joinSession);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('connect_error', handleConnectError);
+    socket.on('ai_typing', handleAiTyping);
+    socket.on('ai_response', handleAiResponse);
+    socket.on('checkout_update', handleCheckoutUpdate);
+    socket.on('chat_error', handleChatError);
     socket.connect();
-    return () => { socket.removeAllListeners(); socket.disconnect(); socketRef.current = null; };
+    return () => {
+      socket.off('connect', joinSession);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('connect_error', handleConnectError);
+      socket.off('ai_typing', handleAiTyping);
+      socket.off('ai_response', handleAiResponse);
+      socket.off('checkout_update', handleCheckoutUpdate);
+      socket.off('chat_error', handleChatError);
+      socket.disconnect();
+      socketRef.current = null;
+    };
   }, [accessToken]);
 
   const sendMessage = useCallback((text: string) => {
@@ -76,7 +119,7 @@ export function useRealtimeChat(accessToken: string) {
     emitMessage(clientMessageId, text);
   }, [emitMessage]);
 
-  return useMemo(() => ({ connectionStatus, errorMessage, messages, retryMessage, sendMessage, typingLabel: typingStage ? typingLabels[typingStage] : null }), [connectionStatus, errorMessage, messages, retryMessage, sendMessage, typingStage]);
+  return useMemo(() => ({ checkout, connectionStatus, errorMessage, isTyping: typingStage !== null, messages, retryMessage, sendMessage, typingLabel: typingStage ? typingLabels[typingStage] : null, typingStage }), [checkout, connectionStatus, errorMessage, messages, retryMessage, sendMessage, typingStage]);
 }
 
 function mergeMessages(incoming: ChatMessageDto[], current: ConversationMessage[]) {

@@ -18,13 +18,75 @@ function createRepository(overrides: Partial<ChatRepository> = {}): ChatReposito
 }
 
 function createEmitter(): ChatEmitter {
-  return { typing: vi.fn(), response: vi.fn(), error: vi.fn() };
+  return { typing: vi.fn(), response: vi.fn(), checkout: vi.fn(), error: vi.fn() };
 }
 
 describe("ChatHandler", () => {
+  it("snapshots accepted-turn history before later rapid messages can pollute it", async () => {
+    const messages: Array<{ id: string; client_message_id: string | null; text: string; sender: "user" | "bot"; timestamp: string; status: "sent" | "seen" }> = [];
+    let sequence = 0;
+    const repository = createRepository({
+      listMessages: vi.fn(async () => [...messages]),
+      createMessage: vi.fn(async (message) => {
+        sequence += 1;
+        const stored = { id: `message-${sequence}`, createdAt: new Date(`2026-07-11T12:00:0${sequence}.000Z`) };
+        messages.push({ id: stored.id, client_message_id: message.externalMessageId ?? null, text: message.redactedContent, sender: message.role === "USER" ? "user" : "bot", timestamp: stored.createdAt.toISOString(), status: "sent" });
+        return stored;
+      }),
+    });
+    const ai: ChatAi = { respond: vi.fn().mockResolvedValue({ text: "Done" }) };
+    const handler = new ChatHandler(repository, ai);
+
+    const [first, second] = await Promise.all([
+      handler.acceptTurn({ userId: "user-1", sessionId: "session-1", text: "first", clientMessageId: "turn-1" }),
+      handler.acceptTurn({ userId: "user-1", sessionId: "session-1", text: "second", clientMessageId: "turn-2" }),
+    ]);
+    await Promise.all([
+      handler.respond({ userId: "user-1", sessionId: first.accepted.sessionId, text: "first", history: first.history }, createEmitter()),
+      handler.respond({ userId: "user-1", sessionId: second.accepted.sessionId, text: "second", history: second.history }, createEmitter()),
+    ]);
+
+    expect(first.accepted.clientMessageId).toBe("turn-1");
+    expect(second.accepted.clientMessageId).toBe("turn-2");
+    expect(ai.respond).toHaveBeenNthCalledWith(1, expect.objectContaining({ history: [{ sender: "user", text: "first" }] }));
+    expect(ai.respond).toHaveBeenNthCalledWith(2, expect.objectContaining({ history: [{ sender: "user", text: "first" }, { sender: "user", text: "second" }] }));
+  });
+  it("persists the response before emitting a safe checkout update", async () => {
+    const repository = createRepository({ createMessage: vi.fn().mockResolvedValue(createdBotMessage) });
+    const ai: ChatAi = { respond: vi.fn().mockResolvedValue({ text: "Quote ready", checkoutEvent: { state: "quote_ready", quote: { quoteId: "quote-1", subtotal: 90000, discountAmount: 0, deliveryFee: 10000, total: 100000, currency: "VND", expiresAt: "2026-07-12T12:30:00.000Z", confirmationPhrase: "CONFIRM ABCD", items: [] } } }) };
+    const emitter = createEmitter();
+    const handler = new ChatHandler(repository, ai);
+
+    await handler.respond({ userId: "user-1", sessionId: "session-1", text: "checkout" }, emitter);
+
+    expect(emitter.response).toHaveBeenCalledBefore(emitter.checkout as ReturnType<typeof vi.fn>);
+    expect(emitter.checkout).toHaveBeenCalledWith(expect.objectContaining({ session_id: "session-1", checkout: expect.objectContaining({ state: "quote_ready" }) }));
+    expect(JSON.stringify((emitter.checkout as ReturnType<typeof vi.fn>).mock.calls)).not.toContain("confirmationToken");
+  });
+
+  it("serializes AI responses for the same session", async () => {
+    let active = 0;
+    let maximumActive = 0;
+    const ai: ChatAi = { respond: vi.fn().mockImplementation(async () => {
+      active += 1;
+      maximumActive = Math.max(maximumActive, active);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      active -= 1;
+      return { text: "Done" };
+    }) };
+    const repository = createRepository({ createMessage: vi.fn().mockResolvedValue(createdBotMessage) });
+    const handler = new ChatHandler(repository, ai);
+
+    await Promise.all([
+      handler.respond({ userId: "user-1", sessionId: "session-1", text: "CONFIRM ABCD" }, createEmitter()),
+      handler.respond({ userId: "user-1", sessionId: "session-1", text: "CONFIRM ABCD" }, createEmitter()),
+    ]);
+
+    expect(maximumActive).toBe(1);
+  });
   it("accepts a user turn then persists and emits the AI response", async () => {
     const repository = createRepository();
-    const ai: ChatAi = { respond: vi.fn().mockResolvedValue("Try our hot wings today!") };
+    const ai: ChatAi = { respond: vi.fn().mockResolvedValue({ text: "Try our hot wings today!" }) };
     const handler = new ChatHandler(repository, ai);
     const emitter = createEmitter();
 

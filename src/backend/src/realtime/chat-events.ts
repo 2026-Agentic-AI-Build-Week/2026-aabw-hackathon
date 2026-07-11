@@ -1,3 +1,5 @@
+import type { CheckoutEvent } from "../ai/checkout-types.js";
+
 export const CHAT_PROTOCOL_VERSION = 1 as const;
 
 export type TypingStage = "thinking" | "checking_menu" | "updating_draft" | "building_quote" | "creating_order";
@@ -19,6 +21,7 @@ export type UserChatAck = { ok: true; session_id: string; message_id: string; cl
 export type AiTypingEvent = { session_id: string; is_typing: boolean; stage: TypingStage };
 export type AiResponseEvent = { session_id: string; message: ChatMessageDto };
 export type ChatErrorEvent = { session_id: string; client_message_id: string | null; error: ChatErrorDto };
+export type CheckoutUpdateEvent = { session_id: string; checkout: CheckoutEvent };
 
 export interface ClientToServerEvents {
   session_join(payload: SessionJoinPayload, acknowledge: (result: SessionJoinAck) => void): void;
@@ -28,6 +31,7 @@ export interface ClientToServerEvents {
 export interface ServerToClientEvents {
   ai_typing(payload: AiTypingEvent): void;
   ai_response(payload: AiResponseEvent): void;
+  checkout_update(payload: CheckoutUpdateEvent): void;
   chat_error(payload: ChatErrorEvent): void;
 }
 

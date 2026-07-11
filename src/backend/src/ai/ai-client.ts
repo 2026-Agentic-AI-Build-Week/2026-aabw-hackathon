@@ -6,5 +6,11 @@ export type ChatAiInput = {
 };
 
 export interface ChatAi {
-  respond(input: ChatAiInput): Promise<string>;
+  respond(input: ChatAiInput): Promise<ChatAiResult>;
 }
+
+export type ChatAiResult = {
+  text: string;
+  checkoutEvent?: CheckoutEvent;
+};
+import type { CheckoutEvent } from "./checkout-types.js";

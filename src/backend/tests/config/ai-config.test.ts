@@ -22,8 +22,18 @@ describe("loadAiConfig", () => {
     });
   });
 
+  it("configures DashScope using its dedicated environment key", () => {
+    expect(loadAiConfig({ AI_PROVIDER: "dashscope", DASHSCOPE_API_KEY: "dashscope-key" })).toMatchObject({
+      provider: "dashscope",
+      baseUrl: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+      modelName: "qwen3.7-plus",
+      disableThinking: true,
+      useDemoFallback: false,
+    });
+  });
+
   it("rejects an unsupported configured provider", () => {
-    expect(() => loadAiConfig({ AI_PROVIDER: "unknown", AI_API_KEY: "key" })).toThrow("AI_PROVIDER must be either openai or openrouter.");
+    expect(() => loadAiConfig({ AI_PROVIDER: "unknown", AI_API_KEY: "key" })).toThrow("AI_PROVIDER must be openai, openrouter, or dashscope.");
   });
 
   it("accepts a bounded output-token override", () => {

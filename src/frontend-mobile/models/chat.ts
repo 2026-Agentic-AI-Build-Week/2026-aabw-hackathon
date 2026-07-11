@@ -12,6 +12,51 @@ export type UserChatAck = { ok: true; session_id: string; message_id: string; cl
 export interface AiTypingEvent { session_id: string; is_typing: boolean; stage: TypingStage; }
 export interface AiResponseEvent { session_id: string; message: ChatMessageDto; }
 export interface ChatErrorEvent { session_id: string; client_message_id: string | null; error: ChatErrorDto; }
-export interface ServerToClientEvents { ai_typing: (payload: AiTypingEvent) => void; ai_response: (payload: AiResponseEvent) => void; chat_error: (payload: ChatErrorEvent) => void; }
+export interface CheckoutLineItem {
+  menuItemId: string;
+  itemName: string;
+  quantity: number;
+  unitPrice: number;
+  modifierTotal: number;
+  lineTotal: number;
+}
+
+export interface CheckoutQuote {
+  quoteId: string;
+  subtotal: number;
+  discountAmount: number;
+  deliveryFee: number;
+  total: number;
+  currency: string;
+  expiresAt: string;
+  confirmationPhrase: string;
+  items: CheckoutLineItem[];
+}
+
+export interface CreatedOrder {
+  orderId: string;
+  status: OrderStatus;
+  total: number;
+  currency: string;
+  createdAt: string;
+}
+
+export type OrderStatus = 'CREATED' | 'CONFIRMED' | 'PREPARING' | 'DELIVERING' | 'COMPLETED' | 'CANCELLED';
+
+export type CheckoutEvent =
+  | { state: 'quote_ready'; quote: CheckoutQuote }
+  | { state: 'order_created'; order: CreatedOrder };
+
+export interface CheckoutUpdateEvent {
+  session_id: string;
+  checkout: CheckoutEvent;
+}
+
+export interface ServerToClientEvents {
+  ai_typing: (payload: AiTypingEvent) => void;
+  ai_response: (payload: AiResponseEvent) => void;
+  checkout_update: (payload: CheckoutUpdateEvent) => void;
+  chat_error: (payload: ChatErrorEvent) => void;
+}
 export interface ClientToServerEvents { session_join: (payload: SessionJoinPayload, acknowledge: (result: SessionJoinAck) => void) => void; user_chat: (payload: UserChatPayload, acknowledge: (result: UserChatAck) => void) => void; }
 export interface ConversationMessage { id: string; clientMessageId: string | null; text: string; sender: ChatSender; timestamp: string; status: ChatMessageStatus; errorMessage?: string; }
