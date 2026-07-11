@@ -88,6 +88,7 @@ enum OrderStatus {
 
 enum PaymentMethod {
   COD
+  QR_TRANSFER
 }
 
 enum HandoffStatus {
@@ -490,6 +491,8 @@ model Order {
   quoteId            String                  @unique @map("quote_id") @db.Uuid
   status             OrderStatus             @default(CREATED)
   paymentMethod      PaymentMethod           @default(COD) @map("payment_method")
+  paymentQrCode      String?                 @unique @map("payment_qr_code")
+  paidAt             DateTime?               @map("paid_at") @db.Timestamptz(3)
   subtotal           Int
   discountAmount     Int                     @default(0) @map("discount_amount")
   deliveryFee        Int                     @default(0) @map("delivery_fee")

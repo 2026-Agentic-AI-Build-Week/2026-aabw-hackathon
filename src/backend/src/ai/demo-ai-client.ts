@@ -8,6 +8,10 @@ export class DemoMenuIntentExtractor implements MenuIntentExtractor {
   async extract(input: ChatAiInput): Promise<MenuIntent> {
     const text = input.text.trim();
     const lower = text.toLocaleLowerCase();
+    if (/^(?:hi|hello|hey|xin chào|chào(?: bạn)?)[!.?]*$/iu.test(text)) return intent("GREETING");
+    const selection = readDemoSelection(text);
+    if (selection) return { ...intent("REFINE_SELECTION"), quantity: selection.quantity, referencedSelection: "CURRENT" };
+    if (/(?:đói(?: bụng| quá)?|(?:cho|đưa|show|xem).*(?:menu|thực đơn)|(?:menu|thực đơn).*(?:đi|nào)?|i am hungry|i'm hungry|show me the menu)/iu.test(text)) return intent("BROWSE_MENU");
     if (/(?:xem|hiện tại|đã chọn|đơn hàng|giỏ hàng|current order|my order|cart)/iu.test(text)) return intent("VIEW_DRAFT");
     if (/\b(checkout|place order|get quote|thanh toán|đặt hàng|báo giá)\b/u.test(lower)) return intent("REQUEST_QUOTE");
     if (/\b(remove|delete|bỏ|xóa)\b/u.test(lower)) return { ...intent("REMOVE_DRAFT_ITEM"), foodQuery: text.replace(/^.*?\b(?:remove|delete|bỏ|xóa)\b\s*/iu, "").trim() || null };
@@ -18,13 +22,17 @@ export class DemoMenuIntentExtractor implements MenuIntentExtractor {
 
 export class DemoMenuResponder implements MenuResponder {
   async generate(_input: ChatAiInput, intent: MenuIntent, items: MenuSearchResult[]): Promise<string> {
+    if (intent.action === "GREETING") return "Hi! Welcome to KFC. What would you like to order today?";
     if (items.length === 0) {
       return intent.action === "COLLECT_DELIVERY"
         ? "I saved the delivery details I could identify. Please provide any missing contact or address details before checkout."
         : "Hi! I’m your KFC demo assistant. Ask me about chicken, burgers, rice, drinks, or another menu favorite.";
     }
-    const suggestions = items.slice(0, 3).map((item) => `${item.name} (${formatVnd(item.price, item.currency)})`).join(", ");
-    return `Here are some available KFC picks: ${suggestions}. Add or remove items, provide delivery details, then ask for checkout when you are ready.`;
+    if (intent.action === "REFINE_SELECTION") {
+      return `Selected ${intent.quantity ?? 1} ${items[0].name}. Add another item or ask for checkout when you are ready.`;
+    }
+    const suggestions = items.slice(0, 3).map((item, index) => `${index + 1}. ${item.name} (${formatVnd(item.price, item.currency)})`).join("\n");
+    return `Here are some available KFC picks:\n${suggestions}\nReply with an item number or name.`;
   }
 }
 
@@ -56,6 +64,13 @@ function hasDeliverySignal(text: string, lower: string): boolean {
     || /(?:\+?84|0)\d{9,10}/u.test(text)
     || /\b(?:deliver|delivery|address|city|ward|district|phone)\b/u.test(lower)
     || /(?:my name is|name is|giao đến|địa chỉ|thành phố|phường|quận|tên(?: tôi)? là)/u.test(lower);
+}
+
+function readDemoSelection(text: string): { quantity: number } | null {
+  const quantitySelection = text.match(/^(\d{1,2})\s+(?:phần|suất|x)\s+(?:món\s+)?số\s+(\d{1,2})$/iu);
+  if (quantitySelection) return { quantity: Number(quantitySelection[1]) };
+  const ordinalSelection = text.match(/^(?:(?:chọn|lấy)\s+|(?:cho tôi\s+)?(?:món\s+)?số\s+)?(\d{1,2})(?:\s+(?:đi|please))?$/iu);
+  return ordinalSelection ? { quantity: 1 } : null;
 }
 
 function formatVnd(price: number, currency: string): string {

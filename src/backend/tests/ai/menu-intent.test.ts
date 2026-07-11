@@ -16,6 +16,13 @@ const contractTypeChecks: {
 };
 
 describe("parseMenuIntent", () => {
+  it("accepts a greeting intent without turning it into a menu search", () => {
+    expect(parseMenuIntent({ action: "GREETING" }, "Hi")).toMatchObject({
+      action: "GREETING",
+      foodQuery: null,
+    });
+  });
+
   it("parses structured item-search intent", () => {
     expect(parseMenuIntent({ action: "SEARCH_ITEM", food_query: "chicken tender", category_query: "fried chicken", item_type: null, quantity: 5, preferences: ["spicy"], referenced_selection: "CURRENT", needs_clarification: false, clarification_question: null })).toMatchObject({ action: "SEARCH_ITEM", foodQuery: "chicken tender", quantity: 5 });
   });

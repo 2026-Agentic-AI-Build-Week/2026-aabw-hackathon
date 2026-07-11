@@ -8,6 +8,14 @@ import { vi } from "vitest";
 const input = { userId: "user-1", sessionId: "session-1", history: [] as Array<{ sender: "user" | "bot"; text: string }> };
 
 describe("demo ordering components", () => {
+  it.each(["Hi", "Hello", "Hey", "Xin chào", "Chào bạn"])("recognizes %s as a greeting", async (text) => {
+    await expect(new DemoMenuIntentExtractor().extract({ ...input, text })).resolves.toMatchObject({ action: "GREETING", foodQuery: null });
+  });
+
+  it.each(["tôi đói bụng", "cho tôi menu đồ đi", "cho xem menu", "I am hungry", "show me the menu"])("recognizes a natural menu browse request: %s", async (text) => {
+    await expect(new DemoMenuIntentExtractor().extract({ ...input, text })).resolves.toMatchObject({ action: "BROWSE_MENU", foodQuery: null });
+  });
+
   it("extracts checkout, delivery, removal, and menu search intents deterministically", async () => {
     const extractor = new DemoMenuIntentExtractor();
 
@@ -16,6 +24,20 @@ describe("demo ordering components", () => {
     await expect(extractor.extract({ ...input, text: "remove Pepsi" })).resolves.toMatchObject({ action: "REMOVE_DRAFT_ITEM", foodQuery: "Pepsi" });
     await expect(extractor.extract({ ...input, text: "Cho tôi xem đơn hàng hiện tại" })).resolves.toMatchObject({ action: "VIEW_DRAFT" });
     await expect(extractor.extract({ ...input, text: "chicken wings" })).resolves.toMatchObject({ action: "SEARCH_ITEM", foodQuery: "chicken wings" });
+  });
+
+  it.each([
+    ["1", 1],
+    ["số 2", 1],
+    ["chọn 3", 1],
+    ["cho tôi món số 4", 1],
+    ["2 phần số 1", 2],
+  ])("recognizes ordinal menu selection: %s", async (text, quantity) => {
+    await expect(new DemoMenuIntentExtractor().extract({ ...input, text })).resolves.toMatchObject({
+      action: "REFINE_SELECTION",
+      quantity,
+      referencedSelection: "CURRENT",
+    });
   });
 
   it.each([
@@ -60,7 +82,7 @@ describe("demo ordering components", () => {
     const drafts = { load: vi.fn(async () => storedDraft), save: vi.fn(async (_sessionId: string, draft: typeof storedDraft) => { storedDraft = draft; }) };
     const orderService = {
       createQuote: vi.fn().mockResolvedValue({ quote_id: "quote-1", subtotal: 100000, discount_amount: 0, delivery_fee: 0, total: 100000, currency: "VND", expires_at: "2026-07-12T12:30:00.000Z", confirmation_token: "server-secret", items: [{ menuItemId: "item-1", itemName: "Chicken Combo", quantity: 1, unitPrice: 100000, modifierTotal: 0, lineTotal: 100000 }] }),
-      createOrder: vi.fn().mockResolvedValue({ created: true, order: { id: "order-1", status: "CREATED", total: 100000, currency: "VND", createdAt: new Date("2026-07-12T12:01:00.000Z") } }),
+      createOrder: vi.fn().mockResolvedValue({ created: true, order: { id: "order-1", status: "CREATED", total: 100000, currency: "VND", createdAt: new Date("2026-07-12T12:01:00.000Z"), paymentQrCode: "KFCQR-DEMO" } }),
     };
     const checkout = new CheckoutOrchestrator(orderService, () => new Date("2026-07-12T12:00:00.000Z"), { confirmationPhrase: () => "CONFIRM DEMO", idempotencyKey: () => "key-1" });
     const search = { browse: vi.fn(), searchCategories: vi.fn(), search: vi.fn() };
@@ -71,6 +93,7 @@ describe("demo ordering components", () => {
 
     expect(quote.checkoutEvent?.state).toBe("quote_ready");
     expect(order.checkoutEvent?.state).toBe("order_created");
+    expect(order.text).toContain("KFCQR-DEMO");
     expect(orderService.createOrder).toHaveBeenCalledWith("user-1", "quote-1", "server-secret", "key-1");
   });
 });

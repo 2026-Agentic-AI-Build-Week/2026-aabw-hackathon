@@ -5,12 +5,19 @@ import type { AuthServiceDependencies } from "../auth/auth-service.js";
 import { MenuItemService } from "../menu-items/menu-item-service.js";
 import { OrderInputError, parseQuoteInput } from "../orders/order-input.js";
 import { OrderError, OrderService } from "../orders/order-service.js";
-import { attachChatSocketServer } from "../realtime/socket-server.js";
+import { attachChatSocketServer, emitPaymentConfirmation } from "../realtime/socket-server.js";
 import type { ChatHandler } from "../realtime/chat-handler.js";
+import { PaymentConfirmationError, type PaymentConfirmationService } from "../payments/payment-confirmation-service.js";
+import type { AiResponseEvent } from "../realtime/chat-events.js";
 
 type RequestOptions = { method?: string; body?: unknown; headers?: Record<string, string> };
 type Application = { listen(port: number, host?: string): Promise<{ close(): Promise<void>; request(path: string, options?: RequestOptions): Promise<Response> }> };
-type ApplicationOptions = { chatHandler?: ChatHandler };
+type ApplicationOptions = {
+  chatHandler?: ChatHandler;
+  paymentCallbackSecret?: string;
+  payments?: Pick<PaymentConfirmationService, "confirm">;
+  notifyPaymentMessage?: (sessionId: string, message: AiResponseEvent["message"]) => void;
+};
 
 export function createAuthApplication(dependencies: AuthServiceDependencies, prisma?: PrismaClient, options: ApplicationOptions = {}): Application {
   const auth = new AuthService(dependencies);
@@ -18,8 +25,10 @@ export function createAuthApplication(dependencies: AuthServiceDependencies, pri
   const menuItems = prisma ? new MenuItemService(prisma) : undefined;
   return {
     async listen(port, host = "127.0.0.1") {
-      const server = createServer((request, response) => void handle(request, response, auth, orders, menuItems));
-      const io = options.chatHandler ? attachChatSocketServer(server, auth, options.chatHandler) : undefined;
+      let io: ReturnType<typeof attachChatSocketServer> | undefined;
+      const notifyPaymentMessage = options.notifyPaymentMessage ?? ((sessionId: string, message: AiResponseEvent["message"]) => { if (io) emitPaymentConfirmation(io, sessionId, message); });
+      const server = createServer((request, response) => void handle(request, response, auth, orders, menuItems, options.payments, options.paymentCallbackSecret, notifyPaymentMessage));
+      io = options.chatHandler ? attachChatSocketServer(server, auth, options.chatHandler) : undefined;
       await new Promise<void>((resolve, reject) => {
         server.once("error", reject);
         server.listen(port, host, () => {
@@ -34,10 +43,19 @@ export function createAuthApplication(dependencies: AuthServiceDependencies, pri
   };
 }
 
-async function handle(request: IncomingMessage, response: ServerResponse, auth: AuthService, orders?: OrderService, menuItems?: MenuItemService): Promise<void> {
+async function handle(request: IncomingMessage, response: ServerResponse, auth: AuthService, orders?: OrderService, menuItems?: MenuItemService, payments?: Pick<PaymentConfirmationService, "confirm">, paymentCallbackSecret?: string, notifyPaymentMessage?: ApplicationOptions["notifyPaymentMessage"]): Promise<void> {
   try {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
     const path = requestUrl.pathname;
+    if (request.method === "POST" && path === "/payments/confirm") {
+      if (!payments || !paymentCallbackSecret) return send(response, 404, { error: { code: "NOT_FOUND", message: "Route not found." } });
+      if (request.headers["x-payment-callback-secret"] !== paymentCallbackSecret) return send(response, 401, { error: { code: "UNAUTHORIZED", message: "Payment callback authentication failed." } });
+      const body = await readJson(request);
+      validateString(body.orderId, "orderId");
+      const result = await payments.confirm(body.orderId);
+      if (result.confirmed && result.sessionId && result.message) notifyPaymentMessage?.(result.sessionId, result.message);
+      return send(response, 200, { order_id: body.orderId, confirmed: result.confirmed });
+    }
     if (request.method === "POST" && path === "/api/auth/login") { const body = await readJson(request); validateString(body.email, "email"); validateString(body.password, "password"); validateString(body.device_id, "device_id"); return send(response, 200, await auth.login(body.email, body.password, body.device_id)); }
     if (request.method === "POST" && path === "/api/auth/refresh") { const body = await readJson(request); validateString(body.refresh_token, "refresh_token"); validateString(body.device_id, "device_id"); return send(response, 200, await auth.refresh(body.refresh_token, body.device_id)); }
     const principal = authenticate(request, auth);
@@ -64,6 +82,7 @@ async function handle(request: IncomingMessage, response: ServerResponse, auth: 
     return send(response, 404, { error: { code: "NOT_FOUND", message: "Route not found." } });
   } catch (error) {
     if (error instanceof OrderError) return send(response, error.statusCode, { error: { code: error.code, message: error.message } });
+    if (error instanceof PaymentConfirmationError) return send(response, error.statusCode, { error: { code: error.code, message: error.message } });
     if (error instanceof AuthError) return send(response, error.statusCode, { error: { code: error.code, message: error.message } });
     if (error instanceof ValidationError || error instanceof OrderInputError) return send(response, 400, { error: { code: "VALIDATION_ERROR", message: error.message } });
     return send(response, 500, { error: { code: "INTERNAL_ERROR", message: "An unexpected server error occurred." } });

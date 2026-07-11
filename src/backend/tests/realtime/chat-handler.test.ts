@@ -9,6 +9,7 @@ const createdBotMessage = { id: "message-bot-1", createdAt: new Date("2026-07-11
 function createRepository(overrides: Partial<ChatRepository> = {}): ChatRepository {
   return {
     getOrCreateSession: vi.fn().mockResolvedValue(session),
+    getCheckout: vi.fn().mockResolvedValue(null),
     listMessages: vi.fn().mockResolvedValue([]),
     findMessageByExternalId: vi.fn().mockResolvedValue(null),
     createMessage: vi.fn().mockResolvedValueOnce(createdUserMessage).mockResolvedValueOnce(createdBotMessage),
@@ -22,6 +23,16 @@ function createEmitter(): ChatEmitter {
 }
 
 describe("ChatHandler", () => {
+  it("restores the persisted checkout when joining an existing session", async () => {
+    const checkout = { state: "order_created" as const, order: { orderId: "order-1", status: "CREATED" as const, total: 100000, currency: "VND", createdAt: "2026-07-12T12:00:00.000Z", paymentQrCode: "KFCQR-DEMO" } };
+    const repository = createRepository({ getCheckout: vi.fn().mockResolvedValue(checkout) });
+    const handler = new ChatHandler(repository, { respond: vi.fn() });
+
+    const joined = await handler.join("user-1");
+
+    expect(joined.checkout).toEqual(checkout);
+  });
+
   it("snapshots accepted-turn history before later rapid messages can pollute it", async () => {
     const messages: Array<{ id: string; client_message_id: string | null; text: string; sender: "user" | "bot"; timestamp: string; status: "sent" | "seen" }> = [];
     let sequence = 0;

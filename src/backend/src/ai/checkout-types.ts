@@ -45,6 +45,7 @@ export type SafeCreatedOrder = {
   total: number;
   currency: string;
   createdAt: string;
+  paymentQrCode: string;
 };
 
 export type CheckoutEvent =

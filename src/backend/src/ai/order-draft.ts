@@ -3,7 +3,7 @@ import type { ConversationLanguage } from "./conversation-language.js";
 import type { MenuIntent, MenuItemType, MenuPreferenceUpdates } from "./menu-intent.js";
 import type { MenuSearchResult } from "./menu-search.js";
 
-export type OrderDraftItem = { menuItemId: string; name: string; quantity: number };
+export type OrderDraftItem = { menuItemId: string; name: string; quantity: number; unitPrice?: number; currency?: string };
 
 export type OrderDraft = {
   responseLanguage: ConversationLanguage | null;
@@ -60,7 +60,10 @@ export function updateOrderDraft(draft: OrderDraft, intent: MenuIntent, results:
     return { ...draft, suggestions: results.slice(0, 8) };
   }
 
-  return applyMenuSelection(draft, selected, quantity, intent.preferences, results);
+  const next = applyMenuSelection(draft, selected, quantity, intent.preferences, results);
+  return intent.action === "REFINE_SELECTION" && draft.suggestions?.length
+    ? { ...next, suggestions: draft.suggestions }
+    : next;
 }
 
 export function applyMenuSelection(
@@ -73,8 +76,8 @@ export function applyMenuSelection(
   const existing = draft.items.find((item) => item.menuItemId === selected.id);
   const itemChanged = !existing || existing.quantity !== quantity || existing.name !== selected.name;
   const items = existing
-    ? draft.items.map((item) => item.menuItemId === selected.id ? { ...item, name: selected.name, quantity } : item)
-    : [...draft.items, { menuItemId: selected.id, name: selected.name, quantity }];
+    ? draft.items.map((item) => item.menuItemId === selected.id ? { ...item, name: selected.name, quantity, unitPrice: selected.price, currency: selected.currency } : item)
+    : [...draft.items, { menuItemId: selected.id, name: selected.name, quantity, unitPrice: selected.price, currency: selected.currency }];
   const mergedPreferences = [...new Set([...draft.preferences, ...preferences])];
   const preferencesChanged = mergedPreferences.length !== draft.preferences.length;
 
@@ -108,6 +111,18 @@ export function removeDraftItem(draft: OrderDraft, menuItemId: string): OrderDra
 
 export function withPendingCheckout(draft: OrderDraft, pendingCheckout: PendingCheckout | null): OrderDraft {
   return { ...draft, pendingCheckout };
+}
+
+export function completeOrderDraft(draft: OrderDraft): OrderDraft {
+  return {
+    ...draft,
+    items: [],
+    preferences: [],
+    unresolvedFields: [],
+    suggestions: [],
+    voucherCode: null,
+    pendingCheckout: null,
+  };
 }
 
 function sameDelivery(left: DeliveryDraft, right: DeliveryDraft): boolean {

@@ -11,7 +11,7 @@ React Native mobile app with Messenger-inspired login and chat flows.
 | --- | --- |
 | Authentication | Email/password login, token refresh, logout, profile lookup, and Expo SecureStore session persistence. |
 | Menu | Authenticated lookup of candidate menu item IDs, including unavailable and missing item classification. |
-| Orders | Quote creation, idempotent order creation, delivery updates, cancellation, pagination, and order-status filtering. |
+| Orders | Quote creation, idempotent order creation, QR-transfer payment confirmation, delivery updates, cancellation, pagination, and order-status filtering. |
 | Inventory | Available stock is seeded and checked before order creation; stock is decremented atomically. |
 | Mobile | Expo login flow, searchable Messenger-style chat list, and authenticated realtime KFC Bot conversation. |
 | Realtime chat | Socket.IO text chat persists a per-user session, builds an order draft, collects delivery details, creates server-priced quotes, and creates an order only after an exact confirmation phrase. Qwen/OpenAI-compatible providers are optional; a deterministic demo fallback is available for development. |
@@ -67,6 +67,22 @@ the mobile API base URL to match.
 - `GET /api/orders/:id`
 - `PATCH /api/orders/:id/delivery`
 - `DELETE /api/orders/:id`
+- `POST /payments/confirm` — backend-only simulated payment callback
+
+Configure `PAYMENT_CALLBACK_SECRET` in `src/backend/.env`. This value is a
+backend-only secret and must never use an `EXPO_PUBLIC_*` name. A demo payment
+callback looks like:
+
+```bash
+curl -X POST http://localhost:3000/payments/confirm \
+  -H 'content-type: application/json' \
+  -H 'x-payment-callback-secret: replace-with-your-secret' \
+  -d '{"orderId":"<created-order-uuid>"}'
+```
+
+The first valid callback changes a QR-transfer order from `CREATED` to
+`CONFIRMED` and sends the persisted success message to the order's active chat
+session. Repeated callbacks are idempotent and do not send duplicate messages.
 
 ### 4. Configure the Expo app
 
@@ -170,8 +186,9 @@ address, or voucher invalidates the pending quote and requires a new quote.
 - Never place a provider key or server token in an `EXPO_PUBLIC_*` variable;
   Expo embeds those variables in the client bundle.
 - The mobile app receives only safe checkout DTOs: item and total information,
-  quote expiry, the user-facing confirmation phrase, and the created order's
-  public status. It never receives the backend confirmation token.
+  quote expiry, the user-facing confirmation phrase, the created order's public
+  status, and its fake payment QR code. It never receives the backend quote
+  confirmation token or payment callback secret.
 - The AI extracts intent and writes natural-language responses, but the REST
   order service remains the source of truth for prices, stock, quote validity,
   and order mutations.

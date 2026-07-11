@@ -11,7 +11,7 @@ const intentTool: ChatCompletionTool = {
     parameters: {
       type: "object",
       properties: {
-        action: { type: "string", enum: ["BROWSE_MENU", "SEARCH_ITEM", "REFINE_SELECTION", "UPDATE_PREFERENCES", "REMOVE_DRAFT_ITEM", "VIEW_DRAFT", "COLLECT_DELIVERY", "REQUEST_QUOTE", "CONFIRM_ORDER", "ASK_CLARIFICATION", "UNSUPPORTED"] },
+        action: { type: "string", enum: ["GREETING", "BROWSE_MENU", "SEARCH_ITEM", "REFINE_SELECTION", "UPDATE_PREFERENCES", "REMOVE_DRAFT_ITEM", "VIEW_DRAFT", "COLLECT_DELIVERY", "REQUEST_QUOTE", "CONFIRM_ORDER", "ASK_CLARIFICATION", "UNSUPPORTED"] },
         food_query: { type: ["string", "null"] },
         category_query: { type: ["string", "null"] },
         item_type: { type: ["string", "null"] },
@@ -50,7 +50,7 @@ export class OpenAiMenuIntentExtractor {
 
   async extract(input: ChatAiInput): Promise<MenuIntent> {
     const messages: ChatCompletionMessageParam[] = [
-      { role: "system", content: `Extract exactly one ordering action. Understand Vietnamese and English and resolve short references from context.
+      { role: "system", content: `Extract exactly one ordering action. Understand Vietnamese and English and resolve short references from context. Use GREETING for standalone greetings such as hi, hello, hey, xin chào, or chào bạn; do not turn greetings into menu searches.
 Use VIEW_DRAFT when the user asks what they selected, what is in the current order, or to view their cart. Use COLLECT_DELIVERY when the user provides any delivery field. Use REQUEST_QUOTE for checkout, price-total, or place-order requests after details are collected. Use REMOVE_DRAFT_ITEM when removing an item.
 Use UPDATE_PREFERENCES when the user excludes or re-allows a menu item type. For example, "Tôi không ăn combo" excludes combo and "Cho tôi xem combo lại" includes combo. Do not search the literal preference sentence. Only emit combo, food, or drink item types.
 CONFIRM_ORDER is reserved for an active backend confirmation phrase; ordinary approval such as yes, okay, đồng ý, or confirm is never sufficient. The application independently intercepts an exact active phrase before this classifier.

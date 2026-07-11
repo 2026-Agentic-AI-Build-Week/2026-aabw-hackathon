@@ -6,7 +6,7 @@ export type TypingStage = 'thinking' | 'checking_menu' | 'updating_draft' | 'bui
 export interface ChatMessageDto { id: string; client_message_id: string | null; text: string; sender: ChatSender; timestamp: string; status: ChatMessageStatus; }
 export interface ChatErrorDto { code: string; message: string; retryable: boolean; }
 export interface SessionJoinPayload { protocol_version: typeof CHAT_PROTOCOL_VERSION; session_id?: string; }
-export type SessionJoinAck = { ok: true; session_id: string; history: ChatMessageDto[] } | { ok: false; error: ChatErrorDto };
+export type SessionJoinAck = { ok: true; session_id: string; history: ChatMessageDto[]; checkout: CheckoutEvent | null } | { ok: false; error: ChatErrorDto };
 export interface UserChatPayload { protocol_version: typeof CHAT_PROTOCOL_VERSION; session_id: string; client_message_id: string; text: string; sent_at: string; }
 export type UserChatAck = { ok: true; session_id: string; message_id: string; client_message_id: string; accepted_at: string } | { ok: false; client_message_id: string; error: ChatErrorDto };
 export interface AiTypingEvent { session_id: string; is_typing: boolean; stage: TypingStage; }
@@ -39,6 +39,7 @@ export interface CreatedOrder {
   total: number;
   currency: string;
   createdAt: string;
+  paymentQrCode: string;
 }
 
 export type OrderStatus = 'CREATED' | 'CONFIRMED' | 'PREPARING' | 'DELIVERING' | 'COMPLETED' | 'CANCELLED';

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   FlatList,
+  Image,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
@@ -17,6 +18,11 @@ import { MessageBubble } from '../components/MessageBubble';
 import { useRealtimeChat } from '../hooks/useRealtimeChat';
 import { theme } from '../theme';
 import { getSystemInsets } from '../utils/systemInsets';
+import type { CheckoutEvent, ConversationMessage } from '../models/chat';
+
+type ChatTimelineItem =
+  | { kind: 'checkout'; checkout: CheckoutEvent; timestamp: string }
+  | { kind: 'message'; message: ConversationMessage; timestamp: string };
 
 interface ChatConversationDetailProps {
   accessToken: string;
@@ -27,6 +33,10 @@ export function ChatConversationDetail({ accessToken, onBackPress }: ChatConvers
   const [draft, setDraft] = useState('');
   const { checkout, connectionStatus, errorMessage, messages, retryMessage, sendMessage, typingLabel } = useRealtimeChat(accessToken);
   const systemInsets = getSystemInsets();
+  const timeline = useMemo<ChatTimelineItem[]>(() => [
+    ...(checkout ? [{ kind: 'checkout' as const, checkout, timestamp: checkoutTimestamp(checkout) }] : []),
+    ...messages.map((message) => ({ kind: 'message' as const, message, timestamp: message.timestamp })),
+  ].sort((left, right) => new Date(right.timestamp).getTime() - new Date(left.timestamp).getTime()), [checkout, messages]);
 
   const handleSend = () => {
     const trimmedDraft = draft.trim();
@@ -56,14 +66,15 @@ export function ChatConversationDetail({ accessToken, onBackPress }: ChatConvers
           onBackPress={onBackPress}
           status={kfcBotProfile.status}
         />
-        {checkout && <CheckoutCard checkout={checkout} onConfirmationPhrasePress={setDraft} />}
         <FlatList
           contentContainerStyle={styles.listContent}
-          data={messages}
+          data={timeline}
           inverted
-          keyExtractor={(message) => message.id}
+          keyExtractor={(item) => item.kind === 'message' ? item.message.id : checkoutKey(item.checkout)}
           keyboardShouldPersistTaps="handled"
-          renderItem={({ item }) => <MessageBubble botAvatarUrl={kfcBotProfile.avatarUrl} message={item} onRetry={retryMessage} />}
+          renderItem={({ item }) => item.kind === 'message'
+            ? <MessageBubble botAvatarUrl={kfcBotProfile.avatarUrl} message={item.message} onRetry={retryMessage} />
+            : <CheckoutMessage checkout={item.checkout} onConfirmationPhrasePress={setDraft} />}
           showsVerticalScrollIndicator={false}
           style={styles.list}
         />
@@ -74,7 +85,45 @@ export function ChatConversationDetail({ accessToken, onBackPress }: ChatConvers
   );
 }
 
+function CheckoutMessage({ checkout, onConfirmationPhrasePress }: { checkout: CheckoutEvent; onConfirmationPhrasePress: (confirmationPhrase: string) => void }) {
+  return (
+    <View style={styles.checkoutMessageRow}>
+      <Image accessibilityLabel="KFC Ordering Assistant avatar" source={{ uri: kfcBotProfile.avatarUrl }} style={styles.botAvatar} />
+      <View style={styles.checkoutMessageContent}>
+        <CheckoutCard checkout={checkout} embedded onConfirmationPhrasePress={onConfirmationPhrasePress} />
+      </View>
+    </View>
+  );
+}
+
+function checkoutKey(checkout: CheckoutEvent): string {
+  return checkout.state === 'quote_ready' ? `checkout-quote-${checkout.quote.quoteId}` : `checkout-order-${checkout.order.orderId}`;
+}
+
+function checkoutTimestamp(checkout: CheckoutEvent): string {
+  if (checkout.state === 'order_created') return checkout.order.createdAt;
+  return new Date(new Date(checkout.quote.expiresAt).getTime() - 15 * 60 * 1000).toISOString();
+}
+
 const styles = StyleSheet.create({
+  botAvatar: {
+    backgroundColor: theme.colors.surfaceVariant,
+    borderRadius: theme.radius.circle,
+    height: theme.layout.messageAvatarSize,
+    marginRight: theme.spacing.sm,
+    width: theme.layout.messageAvatarSize,
+  },
+  checkoutMessageContent: {
+    flexShrink: 1,
+    maxWidth: `${theme.layout.messageBubbleMaxWidth}%`,
+  },
+  checkoutMessageRow: {
+    alignItems: 'flex-end',
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    marginVertical: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.lg,
+  },
   safeArea: {
     backgroundColor: theme.colors.chatCanvas,
     flex: 1,

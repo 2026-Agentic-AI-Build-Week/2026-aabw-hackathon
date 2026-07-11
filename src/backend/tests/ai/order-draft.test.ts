@@ -117,7 +117,7 @@ describe("order draft transitions", () => {
     const source = createEmptyOrderDraft();
     const next = applyMenuSelection(source, suggestion, 2, []);
 
-    expect(next.items).toEqual([{ menuItemId: "item-1", name: "Tender", quantity: 2 }]);
+    expect(next.items).toEqual([{ menuItemId: "item-1", name: "Tender", quantity: 2, unitPrice: 1, currency: "VND" }]);
     expect(source).toEqual(createEmptyOrderDraft());
   });
 
@@ -138,7 +138,7 @@ describe("order draft transitions", () => {
       clarificationQuestion: null,
     }, [suggestion]);
 
-    expect(next.items).toEqual([{ menuItemId: "item-1", name: "Tender", quantity: 1 }]);
+    expect(next.items).toEqual([{ menuItemId: "item-1", name: "Tender", quantity: 1, unitPrice: 1, currency: "VND" }]);
   });
 
   it("merges partial delivery fields and invalidates a stale quote", () => {
@@ -215,6 +215,16 @@ describe("order draft transitions", () => {
 
     expect(next.items[0]?.quantity).toBe(3);
     expect(next.pendingCheckout).toBeNull();
+  });
+
+  it("stores selected item pricing and preserves the original numbered suggestions", () => {
+    const secondSuggestion = { ...suggestion, id: "item-2", name: "Pepsi", price: 20_000 };
+    const source = draft({ suggestions: [suggestion, secondSuggestion] });
+
+    const next = updateOrderDraft(source, { action: "REFINE_SELECTION", foodQuery: null, categoryQuery: null, itemType: null, quantity: 2, preferences: [], preferenceUpdates: { excludeItemTypes: [], includeItemTypes: [] }, referencedSelection: "CURRENT", delivery: null, confirmationPhrase: null, needsClarification: false, clarificationQuestion: null }, [secondSuggestion]);
+
+    expect(next.items).toContainEqual({ menuItemId: "item-2", name: "Pepsi", quantity: 2, unitPrice: 20_000, currency: "VND" });
+    expect(next.suggestions).toEqual(source.suggestions);
   });
 
   it("preserves pending checkout when selection does not change", () => {

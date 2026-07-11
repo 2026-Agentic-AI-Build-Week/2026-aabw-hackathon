@@ -5,7 +5,7 @@ import type { MenuIntent } from "./menu-intent.js";
 import type { MenuIntentExtractor } from "./menu-intent-extractor.js";
 import type { MenuSearch, MenuSearchResult } from "./menu-search.js";
 import { type DeliveryDraft } from "./checkout-types.js";
-import { applyMenuPreferenceUpdate, type OrderDraft, updateOrderDraft } from "./order-draft.js";
+import { applyMenuPreferenceUpdate, removeDraftItem, type OrderDraft, updateOrderDraft } from "./order-draft.js";
 
 export class OrderingAgent implements ChatAi {
   constructor(private readonly extractor: MenuIntentExtractor, private readonly menuSearch: MenuSearch, private readonly responder: MenuResponder, private readonly drafts?: OrderDraftStore, private readonly checkout?: CheckoutPort) {}
@@ -21,6 +21,14 @@ export class OrderingAgent implements ChatAi {
     const intent = extractedIntent.action === "COLLECT_DELIVERY"
       ? { ...extractedIntent, delivery: mergeDeliveryFromMessage(extractedIntent.delivery, input.text) }
       : extractedIntent;
+    if (intent.action === "GREETING") return { text: await this.responder.generate(input, intent, []) };
+    if (currentDraft && this.drafts && intent.action === "REMOVE_DRAFT_ITEM") {
+      const item = findDraftItem(currentDraft, intent.foodQuery);
+      if (!item) return { text: "I could not find that item in your cart. Ask to view your current order to see the item names." };
+      const updatedDraft = removeDraftItem(currentDraft, item.menuItemId);
+      await this.drafts.save(input.sessionId, updatedDraft);
+      return { text: `Removed ${item.name}.\n${renderCurrentDraft(updatedDraft)}` };
+    }
     if (currentDraft && this.drafts && intent.action === "UPDATE_PREFERENCES") {
       const update = intent.preferenceUpdates;
       if (update.excludeItemTypes.length === 0 && update.includeItemTypes.length === 0) {
@@ -55,11 +63,13 @@ export class OrderingAgent implements ChatAi {
     const results = selectedSuggestion ? [selectedSuggestion] : intent.action === "BROWSE_MENU"
       ? await this.menuSearch.browse(8, { excludedItemTypes })
       : await this.menuSearch.search({ query: intent.foodQuery ?? input.text, categoryQuery: intent.categoryQuery, itemType: intent.itemType, categoryIds: categories.map((category) => category.id), excludedItemTypes, limit: 8 });
-    if (this.drafts && currentDraft) await this.drafts.save(input.sessionId, updateOrderDraft(currentDraft, intent, results));
+    const updatedDraft = currentDraft ? updateOrderDraft(currentDraft, intent, results) : undefined;
+    if (this.drafts && updatedDraft) await this.drafts.save(input.sessionId, updatedDraft);
     console.info("Ordering intent processed", { action: intent.action, sessionId: input.sessionId, resultCount: results.length });
     const responseIntent = excludedItemTypes.length > 0
       ? { ...intent, preferenceUpdates: { ...intent.preferenceUpdates, excludeItemTypes: excludedItemTypes } }
       : intent;
+    if (intent.action === "REFINE_SELECTION" && selectedSuggestion && updatedDraft) return { text: renderSelectedCart(updatedDraft, selectedSuggestion.name) };
     return { text: await this.responder.generate(input, responseIntent, results) };
   }
 
@@ -71,42 +81,31 @@ export class OrderingAgent implements ChatAi {
   }
 }
 
-function preferenceClarification(text: string): string {
-  return usesVietnamese(text)
-    ? "Bạn muốn tránh loại món nào: combo, món ăn hay đồ uống?"
-    : "Which menu type would you like to avoid: combos, food, or drinks?";
+function preferenceClarification(_text: string): string {
+  return "Which menu type would you like to avoid: combos, food, or drinks?";
 }
 
-function preferenceUpdatedMessage(text: string, excluded: string[], included: string[]): string {
-  const vietnamese = usesVietnamese(text);
+function preferenceUpdatedMessage(_text: string, excluded: string[], included: string[]): string {
   if (excluded.includes("combo")) {
-    return vietnamese
-      ? "Mình đã ghi nhớ bạn không muốn combo. Bạn muốn xem món lẻ loại nào: burger, gà, cơm hay món ăn kèm?"
-      : "I will exclude combos for this chat. Which individual items would you like: burgers, chicken, rice, or sides?";
+    return "I will exclude combos for this chat. Which individual items would you like: burgers, chicken, rice, or sides?";
   }
   if (included.includes("combo")) {
-    return vietnamese
-      ? "Mình đã bỏ giới hạn combo. Bạn muốn xem combo hay món lẻ nào?"
-      : "Combos are available in your suggestions again. Would you like combos or individual items?";
+    return "Combos are available in your suggestions again. Would you like combos or individual items?";
   }
-  return vietnamese
-    ? "Mình đã cập nhật sở thích thực đơn cho phiên chat này. Bạn muốn xem món gì?"
-    : "I updated your menu preferences for this chat. What would you like to see?";
-}
-
-function usesVietnamese(text: string): boolean {
-  return /[ăâđêôơưàáảãạèéẻẽẹìíỉĩịòóỏõọùúủũụỳýỷỹỵ]/iu.test(text)
-    || /\b(?:tôi|không|ăn|muốn|món|combo|xem|lại)\b/iu.test(text);
+  return "I updated your menu preferences for this chat. What would you like to see?";
 }
 
 function checkoutMessage(event: import("./checkout-types.js").CheckoutEvent | undefined): string {
   if (!event) return "I could not process the checkout request. Please try again.";
   if (event.state === "quote_ready") return `Your quote is ready. Please send ${event.quote.confirmationPhrase} exactly to create the order.`;
-  return `Your order ${event.order.orderId} has been created.`;
+  return `Your order ${event.order.orderId} has been created. Pay with QR code: ${event.order.paymentQrCode}`;
 }
 
 function readSuggestion(text: string, suggestions: MenuSearchResult[] | undefined): MenuSearchResult | undefined {
-  const match = text.trim().match(/^(\d{1,2})(?:\s|$)/);
+  const normalized = text.trim();
+  const match = normalized.match(/(?:món\s+)?số\s+(\d{1,2})$/iu)
+    ?? normalized.match(/^(?:chọn|lấy)\s+(\d{1,2})$/iu)
+    ?? normalized.match(/^(\d{1,2})(?:\s+(?:đi|please))?$/iu);
   if (!match || !suggestions) return undefined;
   return suggestions[Number(match[1]) - 1];
 }
@@ -154,12 +153,31 @@ function missingDeliveryMessage(delivery: DeliveryDraft | null | undefined): str
 }
 
 function renderCurrentDraft(draft: OrderDraft): string {
-  if (draft.items.length === 0) return "Đơn hàng hiện tại của bạn chưa có món nào. Bạn muốn chọn món gì?";
-  const items = draft.items.map((item) => `- ${item.quantity} x ${item.name}`).join("\n");
+  if (draft.items.length === 0) return "Your current cart is empty. What would you like to order?";
+  const items = draft.items.map((item) => `- ${item.quantity} x ${item.name}${item.unitPrice !== undefined ? ` — ${formatDraftMoney(item.unitPrice * item.quantity, item.currency)}` : ""}`).join("\n");
+  const pricedItems = draft.items.filter((item) => item.unitPrice !== undefined);
+  const total = pricedItems.length === draft.items.length ? `\nEstimated total: ${formatDraftMoney(pricedItems.reduce((sum, item) => sum + item.unitPrice! * item.quantity, 0), pricedItems[0]?.currency)}` : "";
   const checkoutHint = draft.pendingCheckout
-    ? `\nBạn đã có quote. Hãy gửi chính xác ${draft.pendingCheckout.confirmationPhrase} để tạo đơn.`
-    : "\nBạn có thể thêm món hoặc nhắn đặt hàng để nhận quote.";
-  return `Đơn hàng hiện tại của bạn:\n${items}${checkoutHint}`;
+    ? `\nA quote is ready. Send ${draft.pendingCheckout.confirmationPhrase} exactly to create the order.`
+    : "\nYou can add another item or send checkout to request a quote.";
+  return `Your current cart:\n${items}${total}${checkoutHint}`;
+}
+
+function renderSelectedCart(draft: OrderDraft, selectedName: string): string {
+  const removalExample = draft.items[0]?.name ?? selectedName;
+  return `Selected ${selectedName}.\n${renderCurrentDraft(draft)}\nTo remove an item, send "remove ${removalExample}".`;
+}
+
+function findDraftItem(draft: OrderDraft, query: string | null): OrderDraft["items"][number] | undefined {
+  const normalized = query?.trim().toLocaleLowerCase();
+  if (!normalized) return undefined;
+  return draft.items.find((item) => item.name.toLocaleLowerCase() === normalized)
+    ?? draft.items.find((item) => item.name.toLocaleLowerCase().includes(normalized));
+}
+
+function formatDraftMoney(amount: number, currency = "VND"): string {
+  const formatted = new Intl.NumberFormat("vi-VN").format(amount);
+  return currency === "VND" ? `${formatted}đ` : `${formatted} ${currency}`;
 }
 
 export interface MenuResponder { generate(input: ChatAiInput, intent: MenuIntent, results: MenuSearchResult[]): Promise<string>; }

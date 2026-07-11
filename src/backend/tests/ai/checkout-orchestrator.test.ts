@@ -36,7 +36,7 @@ function quoteResponse() {
 
 function createdOrder() {
   return {
-    order: { id: "order-1", status: "CREATED" as const, total: 115_000, currency: "VND", createdAt: new Date("2026-07-12T10:01:00.000Z") },
+    order: { id: "order-1", status: "CREATED" as const, total: 115_000, currency: "VND", createdAt: new Date("2026-07-12T10:01:00.000Z"), paymentQrCode: "KFCQR-DEMO" },
     created: true,
   };
 }
@@ -173,7 +173,9 @@ describe("CheckoutOrchestrator.confirmOrder", () => {
     expect(rejected).toMatchObject({ errorCode: "CONFIRMATION_MISMATCH" });
     expect(wrongCase).toMatchObject({ errorCode: "CONFIRMATION_MISMATCH" });
     expect(rejected.draft.pendingCheckout).toEqual(draftWithQuote.pendingCheckout);
-    expect(accepted.event).toMatchObject({ state: "order_created", order: { orderId: "order-1" } });
+    expect(accepted.event).toMatchObject({ state: "order_created", order: { orderId: "order-1", paymentQrCode: "KFCQR-DEMO" } });
+    expect(accepted.draft.items).toEqual([]);
+    expect(accepted.draft.suggestions).toEqual([]);
     expect(orderService.createOrder).toHaveBeenCalledWith("user-1", "quote-1", "server-secret-token", draftWithQuote.pendingCheckout?.idempotencyKey);
   });
 

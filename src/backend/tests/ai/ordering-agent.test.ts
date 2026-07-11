@@ -3,6 +3,24 @@ import { OrderingAgent } from "../../src/ai/ordering-agent.js";
 import { createEmptyOrderDraft } from "../../src/ai/order-draft.js";
 
 describe("OrderingAgent", () => {
+  it("responds to a greeting without searching the menu", async () => {
+    const search = createSearch();
+    const responder = { generate: vi.fn().mockResolvedValue("Hi! Welcome to KFC. What would you like to order today?") };
+    const agent = new OrderingAgent(
+      { extract: vi.fn().mockResolvedValue(createIntent("GREETING")) },
+      search,
+      responder,
+    );
+
+    const result = await agent.respond({ userId: "user-1", sessionId: "session-1", text: "Hi", history: [] });
+
+    expect(search.browse).not.toHaveBeenCalled();
+    expect(search.searchCategories).not.toHaveBeenCalled();
+    expect(search.search).not.toHaveBeenCalled();
+    expect(responder.generate).toHaveBeenCalledWith(expect.objectContaining({ text: "Hi" }), expect.objectContaining({ action: "GREETING" }), []);
+    expect(result.text).toContain("Welcome to KFC");
+  });
+
   it("persists a preference-only exclusion without searching the menu", async () => {
     const draft = {
       ...createEmptyOrderDraft(),
@@ -34,7 +52,7 @@ describe("OrderingAgent", () => {
       menuPreferences: { excludedItemTypes: ["combo"] },
       pendingCheckout: null,
     }));
-    expect(result.text).toBe("Mình đã ghi nhớ bạn không muốn combo. Bạn muốn xem món lẻ loại nào: burger, gà, cơm hay món ăn kèm?");
+    expect(result.text).toBe("I will exclude combos for this chat. Which individual items would you like: burgers, chicken, rice, or sides?");
   });
 
   it("clarifies an empty preference update without saving or searching", async () => {
@@ -53,7 +71,7 @@ describe("OrderingAgent", () => {
     expect(search.browse).not.toHaveBeenCalled();
     expect(search.search).not.toHaveBeenCalled();
     expect(drafts.save).not.toHaveBeenCalled();
-    expect(result.text).toMatch(/muốn tránh|muốn loại trừ|không muốn|nói rõ/iu);
+    expect(result.text).toContain("Which menu type would you like to avoid");
   });
 
   it("passes persisted exclusions to later browse and search operations", async () => {
@@ -121,7 +139,7 @@ describe("OrderingAgent", () => {
     };
     const search = createSearch();
     const drafts = { load: vi.fn().mockResolvedValue(draft), save: vi.fn().mockResolvedValue(undefined) };
-    const responder = { generate: vi.fn().mockResolvedValue("Không có món nào phù hợp với sở thích hiện tại của bạn.") };
+    const responder = { generate: vi.fn().mockResolvedValue("I could not find an item matching your current preferences.") };
     const agent = new OrderingAgent(
       { extract: vi.fn().mockResolvedValue(createIntent("BROWSE_MENU")) },
       search,
@@ -131,7 +149,7 @@ describe("OrderingAgent", () => {
 
     const result = await agent.respond({ userId: "user-1", sessionId: "session-1", text: "Xem menu", history: [] });
 
-    expect(result.text.toLocaleLowerCase()).toContain("sở thích hiện tại");
+    expect(result.text.toLocaleLowerCase()).toContain("current preferences");
     expect(result.text.toLocaleLowerCase()).not.toMatch(/hết hàng|sold out/u);
   });
 
@@ -148,7 +166,7 @@ describe("OrderingAgent", () => {
     };
     const extractor = { extract: vi.fn() };
     const drafts = { load: vi.fn().mockResolvedValue(draft), save: vi.fn().mockResolvedValue(undefined) };
-    const checkout = { requestQuote: vi.fn(), confirmOrder: vi.fn().mockResolvedValue({ draft: { ...draft, pendingCheckout: null }, event: { state: "order_created", order: { orderId: "order-1", status: "CREATED", total: 100000, currency: "VND", createdAt: "2026-07-12T12:00:00.000Z" } } }) };
+    const checkout = { requestQuote: vi.fn(), confirmOrder: vi.fn().mockResolvedValue({ draft: { ...draft, pendingCheckout: null }, event: { state: "order_created", order: { orderId: "order-1", status: "CREATED", total: 100000, currency: "VND", createdAt: "2026-07-12T12:00:00.000Z", paymentQrCode: "KFCQR-DEMO" } } }) };
     const responder = createResponder();
     const agent = new OrderingAgent(extractor, createSearch(), responder, drafts, checkout);
 
@@ -156,6 +174,7 @@ describe("OrderingAgent", () => {
 
     expect(extractor.extract).not.toHaveBeenCalled();
     expect(checkout.confirmOrder).toHaveBeenCalledWith("user-1", draft, "CONFIRM 7A2F");
+    expect(result.text).toContain("KFCQR-DEMO");
     expect(drafts.save).toHaveBeenCalledTimes(1);
     expect(result.checkoutEvent?.state).toBe("order_created");
   });
@@ -237,7 +256,7 @@ describe("OrderingAgent", () => {
 
     const result = await agent.respond({ userId: "user-1", sessionId: "session-1", text: "Show my current order", history: [] });
 
-    expect(result.text).toContain("chưa có món nào");
+    expect(result.text).toContain("current cart is empty");
   });
 
   it("does not treat an ordinary yes as order confirmation", async () => {
@@ -254,7 +273,6 @@ describe("OrderingAgent", () => {
 
   it.each([
     ["COLLECT_DELIVERY", { delivery: { email: "guest@example.com" } }],
-    ["REMOVE_DRAFT_ITEM", { foodQuery: "Pepsi" }],
   ])("loads and saves exactly once for %s", async (action, fields) => {
     const draft = createEmptyOrderDraft();
     const extractor = { extract: vi.fn().mockResolvedValue({ ...createIntent(action), ...fields }) };
@@ -287,7 +305,7 @@ describe("OrderingAgent", () => {
     const agent = new OrderingAgent(extractor, search, responder, drafts);
     await agent.respond({ userId: "user-1", sessionId: "session-1", text: "2 tenders", history: [] });
     expect(search.search).toHaveBeenCalledWith(expect.objectContaining({ categoryIds: ["category-1"], query: "tender" }));
-    expect(drafts.save).toHaveBeenCalledWith("session-1", expect.objectContaining({ items: [{ menuItemId: "item-1", name: "Tender", quantity: 2 }] }));
+    expect(drafts.save).toHaveBeenCalledWith("session-1", expect.objectContaining({ items: [expect.objectContaining({ menuItemId: "item-1", name: "Tender", quantity: 2, unitPrice: 1, currency: "VND" })] }));
   });
 
   it("uses featured menu items for broad browse intent", async () => {
@@ -311,7 +329,35 @@ describe("OrderingAgent", () => {
     const agent = new OrderingAgent(extractor, search, responder, drafts);
     await agent.respond({ userId: "user-1", sessionId: "session-1", text: "1 đi", history: [] });
     expect(search.search).not.toHaveBeenCalled();
-    expect(responder.generate).toHaveBeenCalledWith(expect.anything(), expect.anything(), [suggestion]);
+    expect(drafts.save).toHaveBeenCalledWith("session-1", expect.objectContaining({ items: [expect.objectContaining({ menuItemId: "item-1" })], suggestions: [suggestion] }));
+  });
+
+  it("reports the cumulative cart total after selecting another numbered item", async () => {
+    const suggestions = [
+      { id: "item-1", name: "Combo One", slug: "combo-one", itemType: "combo", description: null, price: 100_000, currency: "VND", categories: [], score: 1 },
+      { id: "item-2", name: "Combo Two", slug: "combo-two", itemType: "combo", description: null, price: 50_000, currency: "VND", categories: [], score: 1 },
+    ];
+    const draft = { ...createEmptyOrderDraft(), items: [{ menuItemId: "item-1", name: "Combo One", quantity: 1, unitPrice: 100_000, currency: "VND" }], suggestions };
+    const drafts = { load: vi.fn().mockResolvedValue(draft), save: vi.fn() };
+    const agent = new OrderingAgent({ extract: vi.fn().mockResolvedValue({ ...createIntent("REFINE_SELECTION"), referencedSelection: "CURRENT" }) }, createSearch(), createResponder(), drafts);
+
+    const result = await agent.respond({ userId: "user-1", sessionId: "session-1", text: "2", history: [] });
+
+    expect(result.text).toContain("150.000");
+    expect(result.text).toContain('remove Combo One');
+    expect(result.text).not.toContain("<item name>");
+    expect(drafts.save).toHaveBeenCalledWith("session-1", expect.objectContaining({ items: expect.arrayContaining([expect.objectContaining({ menuItemId: "item-1" }), expect.objectContaining({ menuItemId: "item-2" })]) }));
+  });
+
+  it("removes a named item from the persisted cart", async () => {
+    const draft = { ...createEmptyOrderDraft(), items: [{ menuItemId: "item-1", name: "Combo One", quantity: 1 }, { menuItemId: "item-2", name: "Pepsi", quantity: 1 }] };
+    const drafts = { load: vi.fn().mockResolvedValue(draft), save: vi.fn() };
+    const agent = new OrderingAgent({ extract: vi.fn().mockResolvedValue({ ...createIntent("REMOVE_DRAFT_ITEM"), foodQuery: "Pepsi" }) }, createSearch(), createResponder(), drafts);
+
+    const result = await agent.respond({ userId: "user-1", sessionId: "session-1", text: "remove Pepsi", history: [] });
+
+    expect(result.text).toContain("Pepsi");
+    expect(drafts.save).toHaveBeenCalledWith("session-1", expect.objectContaining({ items: [expect.objectContaining({ menuItemId: "item-1" })] }));
   });
 });
 

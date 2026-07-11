@@ -2,24 +2,26 @@ import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } fr
 
 import type { CheckoutEvent, CheckoutLineItem } from '../models/chat';
 import { theme } from '../theme';
+import { FakeQrCode } from './FakeQrCode';
 
 interface CheckoutCardProps {
   checkout: CheckoutEvent;
+  embedded?: boolean;
   onConfirmationPhrasePress: (confirmationPhrase: string) => void;
 }
 
-export function CheckoutCard({ checkout, onConfirmationPhrasePress }: CheckoutCardProps) {
+export function CheckoutCard({ checkout, embedded = false, onConfirmationPhrasePress }: CheckoutCardProps) {
   const { height: viewportHeight } = useWindowDimensions();
   const cardMaximumHeight = viewportHeight * theme.layout.checkoutCardMaximumViewportRatio;
 
   if (checkout.state === 'order_created') {
-    return <CreatedOrderCard checkout={checkout} maximumHeight={cardMaximumHeight} />;
+    return <CreatedOrderCard checkout={checkout} embedded={embedded} maximumHeight={cardMaximumHeight} />;
   }
 
   const { quote } = checkout;
 
   return (
-    <View accessibilityLabel="Order quote" style={[styles.card, { maxHeight: cardMaximumHeight }]}>
+    <View accessibilityLabel="Order quote" style={[styles.card, embedded && styles.embeddedCard, !embedded && { maxHeight: cardMaximumHeight }]}>
       <Text style={styles.title}>Review your order</Text>
       <ScrollView
         contentContainerStyle={styles.itemsContent}
@@ -52,18 +54,22 @@ export function CheckoutCard({ checkout, onConfirmationPhrasePress }: CheckoutCa
 
 interface CreatedOrderCardProps {
   checkout: CheckoutEvent;
+  embedded: boolean;
   maximumHeight: number;
 }
 
-function CreatedOrderCard({ checkout, maximumHeight }: CreatedOrderCardProps) {
+function CreatedOrderCard({ checkout, embedded, maximumHeight }: CreatedOrderCardProps) {
   if (checkout.state !== 'order_created') {
     return null;
   }
 
   return (
-    <View accessibilityLabel="Order created" style={[styles.card, styles.createdCard, { maxHeight: maximumHeight }]}>
+    <View accessibilityLabel="Order created" style={[styles.card, styles.createdCard, embedded && styles.embeddedCard, !embedded && { maxHeight: maximumHeight }]}>
       <Text style={styles.createdTitle}>Order created</Text>
       <Text style={styles.createdBody}>Order {checkout.order.orderId}</Text>
+      <Text style={styles.createdBody}>Pay with this QR code:</Text>
+      <FakeQrCode value={checkout.order.paymentQrCode} />
+      <Text selectable style={styles.paymentCode}>{checkout.order.paymentQrCode}</Text>
       <SummaryRow label="Status" value={formatStatus(checkout.order.status)} />
       <View style={styles.totalRow}>
         <Text style={styles.totalLabel}>Total</Text>
@@ -151,6 +157,10 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     ...theme.typography.checkoutBody,
   },
+  embeddedCard: {
+    marginHorizontal: 0,
+    marginVertical: 0,
+  },
   instructionText: {
     color: theme.colors.textPrimary,
     ...theme.typography.checkoutBody,
@@ -178,6 +188,11 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     flex: 1,
     ...theme.typography.checkoutBody,
+  },
+  paymentCode: {
+    color: theme.colors.textPrimary,
+    textAlign: 'center',
+    ...theme.typography.checkoutCode,
   },
   summaryLabel: {
     color: theme.colors.textSecondary,

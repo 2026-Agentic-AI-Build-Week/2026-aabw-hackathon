@@ -57,9 +57,7 @@ export function useRealtimeChat(accessToken: string) {
       setConnectionStatus('connecting');
       socket.emit('session_join', { protocol_version: CHAT_PROTOCOL_VERSION, ...(sessionIdRef.current ? { session_id: sessionIdRef.current } : {}) }, (ack) => {
         if (!ack.ok) { setConnectionStatus('disconnected'); setErrorMessage(ack.error.message); return; }
-        if (sessionIdRef.current !== ack.session_id) {
-          setCheckout(null);
-        }
+        setCheckout(ack.checkout);
         sessionIdRef.current = ack.session_id;
         setMessages((current) => mergeMessages(ack.history, current));
         setConnectionStatus('connected');

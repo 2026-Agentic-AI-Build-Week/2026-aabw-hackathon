@@ -1,6 +1,7 @@
 import type { DeliveryDraft } from "./checkout-types.js";
 
 export type MenuIntentAction =
+  | "GREETING"
   | "BROWSE_MENU"
   | "SEARCH_ITEM"
   | "REFINE_SELECTION"
@@ -64,7 +65,8 @@ function fallbackIntent(text: string): MenuIntent {
 }
 
 function readAction(value: unknown): MenuIntentAction | null {
-  return value === "BROWSE_MENU"
+  return value === "GREETING"
+    || value === "BROWSE_MENU"
     || value === "SEARCH_ITEM"
     || value === "REFINE_SELECTION"
     || value === "UPDATE_PREFERENCES"

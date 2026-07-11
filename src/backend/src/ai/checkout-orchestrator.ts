@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { CheckoutEvent, DeliveryDraft, SafeCreatedOrder, SafeQuote } from "./checkout-types.js";
-import { withPendingCheckout, type OrderDraft } from "./order-draft.js";
+import { completeOrderDraft, withPendingCheckout, type OrderDraft } from "./order-draft.js";
 import type { QuoteInput } from "../orders/order-input.js";
 import { OrderError, type OrderService } from "../orders/order-service.js";
 import { confirmationPhrasesMatch } from "./checkout-confirmation.js";
@@ -11,7 +11,7 @@ type QuoteResponse = Omit<QuoteResponseSource, "items"> & {
   items: Array<Pick<QuoteItemSource, "menuItemId" | "itemName" | "quantity" | "unitPrice" | "modifierTotal" | "lineTotal">>;
 };
 type CreatedOrderResponse = Awaited<ReturnType<OrderService["createOrder"]>>;
-type SafeOrderSource = Pick<CreatedOrderResponse["order"], "id" | "status" | "total" | "currency" | "createdAt">;
+type SafeOrderSource = Pick<CreatedOrderResponse["order"], "id" | "status" | "total" | "currency" | "createdAt" | "paymentQrCode">;
 
 export type OrderServicePort = {
   createQuote(...args: Parameters<OrderService["createQuote"]>): Promise<QuoteResponse>;
@@ -152,9 +152,10 @@ export class CheckoutOrchestrator {
         total: result.order.total,
         currency: result.order.currency,
         createdAt: result.order.createdAt.toISOString(),
+        paymentQrCode: result.order.paymentQrCode ?? "",
       };
       return {
-        draft: withPendingCheckout(draft, null),
+        draft: completeOrderDraft(draft),
         event: { state: "order_created", order: safeOrder },
       };
     } catch (error) {

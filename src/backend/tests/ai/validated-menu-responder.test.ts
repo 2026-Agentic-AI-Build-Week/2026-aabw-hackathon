@@ -4,6 +4,20 @@ import { ValidatedMenuResponder } from "../../src/ai/validated-menu-responder.js
 const burgerYo = { id: "item-1", name: "Burger Gà Yo", slug: "burger-ga-yo", itemType: "food", description: "1 phần Burger Gà Yo", price: 30000, currency: "VND", categories: ["Burger"], score: 1 };
 
 describe("ValidatedMenuResponder", () => {
+  it.each([
+    ["Hi", "Hi! Welcome to KFC"],
+    ["Xin chào", "Hi! Welcome to KFC"],
+  ])("responds to greeting %s without reporting a missing menu item", async (text, expected) => {
+    const response = await new ValidatedMenuResponder().generate(
+      { userId: "user-1", sessionId: "session-1", text, history: [] },
+      { action: "GREETING", foodQuery: null, categoryQuery: null, itemType: null, quantity: null, preferences: [], preferenceUpdates: { excludeItemTypes: [], includeItemTypes: [] }, referencedSelection: null, delivery: null, confirmationPhrase: null, needsClarification: false, clarificationQuestion: null },
+      [],
+    );
+
+    expect(response).toContain(expected);
+    expect(response).not.toMatch(/could not find|không tìm thấy/iu);
+  });
+
   it("states an item returned by the database is available instead of letting the model deny it", async () => {
     const response = await new ValidatedMenuResponder().generate(
       { userId: "user-1", sessionId: "session-1", text: "Gà yo", history: [] },
@@ -23,7 +37,7 @@ describe("ValidatedMenuResponder", () => {
       [],
     );
 
-    expect(response).toContain("không tìm thấy món phù hợp đang bán");
+    expect(response).toContain("could not find a matching item currently offered");
     expect(response).not.toContain("Burger Gà Yo");
     expect(response.toLocaleLowerCase()).not.toMatch(/hết hàng|sold out/u);
   });

@@ -16,12 +16,14 @@ import { createAuthApplication } from "./http/app.js";
 import { ChatHandler } from "./realtime/chat-handler.js";
 import { PrismaChatRepository } from "./realtime/prisma-chat-repository.js";
 import { OrderService } from "./orders/order-service.js";
+import { PrismaPaymentConfirmationRepository, PaymentConfirmationService } from "./payments/payment-confirmation-service.js";
 
 const config = loadAuthConfig();
 const aiConfig = loadAiConfig();
 const prisma = new PrismaClient();
 const menuSearch = new PrismaMenuSearch(prisma);
 const orderService = new OrderService(prisma);
+const payments = new PaymentConfirmationService(new PrismaPaymentConfirmationRepository(prisma));
 const checkout = new CheckoutOrchestrator(orderService);
 const drafts = new PrismaOrderDraftStore(prisma);
 const menuResponder = new ValidatedMenuResponder();
@@ -33,7 +35,7 @@ const ai = aiConfig.useDemoFallback
 const application = createAuthApplication(
   { repository: new PrismaAuthRepository(prisma), hasher: new PasswordHasher(config.tokenPepper), tokens: new TokenService(config.accessTokenSecret, config.refreshTokenSecret, config.accessTokenTtlSeconds, config.refreshTokenTtlSeconds) },
   prisma,
-  { chatHandler: new ChatHandler(new PrismaChatRepository(prisma), ai) },
+  { chatHandler: new ChatHandler(new PrismaChatRepository(prisma), ai), payments, paymentCallbackSecret: process.env.PAYMENT_CALLBACK_SECRET },
 );
 const host = process.env.HOST ?? "0.0.0.0";
 const port = Number(process.env.PORT ?? 3000);

@@ -15,7 +15,7 @@ export type ChatMessageDto = {
 
 export type ChatErrorDto = { code: string; message: string; retryable: boolean };
 export type SessionJoinPayload = { protocol_version: typeof CHAT_PROTOCOL_VERSION; session_id?: string };
-export type SessionJoinAck = { ok: true; session_id: string; history: ChatMessageDto[] } | { ok: false; error: ChatErrorDto };
+export type SessionJoinAck = { ok: true; session_id: string; history: ChatMessageDto[]; checkout: CheckoutEvent | null } | { ok: false; error: ChatErrorDto };
 export type UserChatPayload = { protocol_version: typeof CHAT_PROTOCOL_VERSION; session_id: string; client_message_id: string; text: string; sent_at: string };
 export type UserChatAck = { ok: true; session_id: string; message_id: string; client_message_id: string; accepted_at: string } | { ok: false; client_message_id: string; error: ChatErrorDto };
 export type AiTypingEvent = { session_id: string; is_typing: boolean; stage: TypingStage };

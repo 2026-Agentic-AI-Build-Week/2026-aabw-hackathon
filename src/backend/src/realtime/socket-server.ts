@@ -17,6 +17,10 @@ export function createSocketChatEmitter(socket: SocketChatEmitterTarget): ChatEm
   };
 }
 
+export function emitPaymentConfirmation(io: Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>, sessionId: string, message: Parameters<ServerToClientEvents["ai_response"]>[0]["message"]): void {
+  io.to(sessionId).emit("ai_response", { session_id: sessionId, message });
+}
+
 export function attachChatSocketServer(httpServer: HttpServer, auth: AuthService, handler: ChatHandler): Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData> {
   const io = new Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>(httpServer, { cors: { origin: "*" } });
   io.use((socket, next) => {
@@ -37,7 +41,8 @@ export function attachChatSocketServer(httpServer: HttpServer, auth: AuthService
       try {
         if (payload.protocol_version !== CHAT_PROTOCOL_VERSION) throw new ChatInputError("UNSUPPORTED_PROTOCOL", "The chat protocol version is unsupported.");
         const session = await handler.join(socket.data.userId);
-        acknowledge({ ok: true, session_id: session.sessionId, history: session.history });
+        socket.join(session.sessionId);
+        acknowledge({ ok: true, session_id: session.sessionId, history: session.history, checkout: session.checkout });
       } catch (error) {
         acknowledge({ ok: false, error: toErrorDto(error) });
       }

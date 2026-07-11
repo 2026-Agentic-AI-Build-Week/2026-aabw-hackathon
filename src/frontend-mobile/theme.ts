@@ -86,6 +86,8 @@ export interface ThemeTokens {
     androidSystemBarMaximumInset: number;
     checkoutCardMaximumViewportRatio: number;
     checkoutItemsMaximumViewportRatio: number;
+    qrCodeModuleCount: number;
+    qrCodeSize: number;
     listItemVerticalPadding: number;
     bottomPadding: number;
   };
@@ -257,6 +259,8 @@ export const theme: ThemeTokens = {
     androidSystemBarMaximumInset: 24,
     checkoutCardMaximumViewportRatio: 0.42,
     checkoutItemsMaximumViewportRatio: 0.18,
+    qrCodeModuleCount: 21,
+    qrCodeSize: 168,
     listItemVerticalPadding: 10,
     bottomPadding: 20,
   },

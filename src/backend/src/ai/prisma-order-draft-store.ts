@@ -53,7 +53,7 @@ function parseItems(value: unknown[]): OrderDraftItem[] {
     if (!row || !isPositiveInteger(row.quantity)) return [];
     const menuItemId = readNonEmptyString(row.menuItemId);
     const name = readNonEmptyString(row.name);
-    return menuItemId && name ? [{ menuItemId, name, quantity: row.quantity }] : [];
+    return menuItemId && name ? [{ menuItemId, name, quantity: row.quantity, ...(typeof row.unitPrice === "number" ? { unitPrice: row.unitPrice } : {}), ...(typeof row.currency === "string" ? { currency: row.currency } : {}) }] : [];
   });
 }
 

@@ -1,5 +1,6 @@
 import type { MessageDirection, MessageRole } from "@prisma/client";
 import type { ChatAi } from "../ai/ai-client.js";
+import type { CheckoutEvent } from "../ai/checkout-types.js";
 import type { AiResponseEvent, AiTypingEvent, ChatErrorEvent, ChatMessageDto, CheckoutUpdateEvent } from "./chat-events.js";
 
 type Session = { id: string; sessionKey: string };
@@ -8,6 +9,7 @@ type CreateMessageInput = { sessionId: string; direction: MessageDirection; role
 
 export interface ChatRepository {
   getOrCreateSession(userId: string): Promise<Session>;
+  getCheckout(sessionId: string): Promise<CheckoutEvent | null>;
   listMessages(sessionId: string): Promise<ChatMessageDto[]>;
   findMessageByExternalId(sessionId: string, externalMessageId: string): Promise<StoredMessage | null>;
   createMessage(input: CreateMessageInput): Promise<StoredMessage>;
@@ -29,9 +31,10 @@ export class ChatHandler {
   private readonly acceptanceQueues = new Map<string, Promise<AcceptedTurn>>();
   constructor(private readonly repository: ChatRepository, private readonly ai: ChatAi) {}
 
-  async join(userId: string): Promise<{ sessionId: string; history: ChatMessageDto[] }> {
+  async join(userId: string): Promise<{ sessionId: string; history: ChatMessageDto[]; checkout: CheckoutEvent | null }> {
     const session = await this.repository.getOrCreateSession(userId);
-    return { sessionId: session.id, history: await this.repository.listMessages(session.id) };
+    const [history, checkout] = await Promise.all([this.repository.listMessages(session.id), this.repository.getCheckout(session.id)]);
+    return { sessionId: session.id, history, checkout };
   }
 
   async accept(input: ChatTurnInput): Promise<AcceptedMessage> {
