@@ -3,14 +3,14 @@ import { AuthError, AuthService } from "../auth/auth-service.js";
 import type { AuthServiceDependencies } from "../auth/auth-service.js";
 
 type RequestOptions = { method?: string; body?: unknown; headers?: Record<string, string> };
-type Application = { listen(port: number): Promise<{ close(): Promise<void>; request(path: string, options?: RequestOptions): Promise<Response> }> };
+type Application = { listen(port: number, host?: string): Promise<{ close(): Promise<void>; request(path: string, options?: RequestOptions): Promise<Response> }> };
 
 export function createAuthApplication(dependencies: AuthServiceDependencies): Application {
   const service = new AuthService(dependencies);
   return {
-    async listen(port) {
+    async listen(port, host = "127.0.0.1") {
       const server = createServer((request, response) => void handle(request, response, service));
-      await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
+      await new Promise<void>((resolve) => server.listen(port, host, resolve));
       const address = server.address();
       if (!address || typeof address === "string") throw new Error("Server did not bind to a TCP port.");
       return {

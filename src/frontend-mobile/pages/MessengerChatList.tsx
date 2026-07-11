@@ -1,9 +1,7 @@
 import { useMemo, useState } from 'react';
 import {
   FlatList,
-  Platform,
   SafeAreaView,
-  StatusBar,
   StyleSheet,
   View,
 } from 'react-native';
@@ -13,6 +11,7 @@ import { ChatListItem } from '../components/ChatListItem';
 import { Header } from '../components/Header';
 import { SearchBar } from '../components/SearchBar';
 import { theme } from '../theme';
+import { getSystemInsets } from '../utils/systemInsets';
 
 interface MessengerChatListProps {
   onChatPress?: (chat: ChatMessage) => void;
@@ -20,12 +19,7 @@ interface MessengerChatListProps {
 
 export function MessengerChatList({ onChatPress }: MessengerChatListProps) {
   const [query, setQuery] = useState('');
-  const androidStatusBarInset = Platform.OS === 'android'
-    ? StatusBar.currentHeight ?? theme.spacing.xl
-    : undefined;
-  const androidBottomInset = Platform.OS === 'android'
-    ? theme.spacing.sm
-    : undefined;
+  const systemInsets = getSystemInsets();
 
   const filteredChats = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase('vi-VN');
@@ -44,8 +38,8 @@ export function MessengerChatList({ onChatPress }: MessengerChatListProps) {
       style={[
         styles.safeArea,
         {
-          paddingBottom: androidBottomInset,
-          paddingTop: androidStatusBarInset,
+          paddingBottom: systemInsets.bottom,
+          paddingTop: systemInsets.top,
         },
       ]}
     >

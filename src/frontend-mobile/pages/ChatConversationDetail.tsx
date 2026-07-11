@@ -4,7 +4,6 @@ import {
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
-  StatusBar,
   StyleSheet,
 } from 'react-native';
 
@@ -17,6 +16,7 @@ import { ChatHeader } from '../components/ChatHeader';
 import { ChatInputBar } from '../components/ChatInputBar';
 import { MessageBubble } from '../components/MessageBubble';
 import { theme } from '../theme';
+import { getSystemInsets } from '../utils/systemInsets';
 
 interface ChatConversationDetailProps {
   onBackPress: () => void;
@@ -27,12 +27,7 @@ export function ChatConversationDetail({ onBackPress }: ChatConversationDetailPr
   const [draft, setDraft] = useState('');
 
   const invertedMessages = useMemo(() => [...messages].reverse(), [messages]);
-  const androidStatusBarInset = Platform.OS === 'android'
-    ? StatusBar.currentHeight ?? theme.spacing.xl
-    : undefined;
-  const androidBottomInset = Platform.OS === 'android'
-    ? theme.spacing.sm
-    : undefined;
+  const systemInsets = getSystemInsets();
 
   const handleSend = () => {
     const trimmedDraft = draft.trim();
@@ -58,8 +53,8 @@ export function ChatConversationDetail({ onBackPress }: ChatConversationDetailPr
       style={[
         styles.safeArea,
         {
-          paddingBottom: androidBottomInset,
-          paddingTop: androidStatusBarInset,
+          paddingBottom: systemInsets.bottom,
+          paddingTop: systemInsets.top,
         },
       ]}
     >

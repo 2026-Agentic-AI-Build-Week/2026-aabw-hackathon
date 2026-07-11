@@ -23,6 +23,8 @@ export interface ThemeTokens {
     loginInputBorder: string;
     loginPlaceholder: string;
     loginButtonDisabled: string;
+    error: string;
+    errorBackground: string;
   };
   typography: {
     title: TextStyle;
@@ -70,6 +72,8 @@ export interface ThemeTokens {
     loginLogoIconSize: number;
     loginInputHeight: number;
     loginContentOffset: number;
+    androidSystemBarFallbackInset: number;
+    androidSystemBarMaximumInset: number;
     listItemVerticalPadding: number;
     bottomPadding: number;
   };
@@ -100,6 +104,8 @@ export const theme: ThemeTokens = {
     loginInputBorder: '#D1D5DB',
     loginPlaceholder: '#6B7280',
     loginButtonDisabled: '#93C5FD',
+    error: '#BA1A1A',
+    errorBackground: '#FFDAD6',
   },
   typography: {
     title: {
@@ -204,6 +210,8 @@ export const theme: ThemeTokens = {
     loginLogoIconSize: 48,
     loginInputHeight: 52,
     loginContentOffset: 64,
+    androidSystemBarFallbackInset: 12,
+    androidSystemBarMaximumInset: 24,
     listItemVerticalPadding: 10,
     bottomPadding: 20,
   },

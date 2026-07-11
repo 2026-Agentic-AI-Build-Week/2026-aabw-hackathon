@@ -18,12 +18,15 @@ src/frontend-mobile/
 │   └── SearchBar.tsx         # Input tìm kiếm với các icon Expo
 ├── App.tsx                     # Expo application entry point
 ├── AGENTS.md                    # Agent context: architecture and current status
+├── LoginScreen.tsx              # English login and backend auth integration
 ├── pages/
 │   ├── ChatConversationDetail.tsx # Screen hội thoại: inverted FlatList + keyboard
 │   ├── MessengerChatList.tsx      # Danh sách chat, search và FlatList
 │   ├── MessengerChatModule.tsx    # Điều hướng nội bộ list và conversation
 │   └── MessengerLogin.tsx         # Login UI theo Messenger, submit mock vào chat
 ├── chatData.ts               # DTO chat list/detail và mock data
+├── services/authService.ts    # Axios login + SecureStore session handling
+├── .env.example               # API base URL configuration template
 ├── theme.ts                  # Design tokens dùng xuyên suốt module
 ├── app.json                  # Expo application metadata
 ├── package.json              # Expo dependencies và scripts
@@ -48,14 +51,46 @@ font-size, font-weight hoặc khoảng cách mới vào các `StyleSheet` cục 
 
 ## Navigation
 
-`App.tsx` hiển thị `pages/MessengerLogin.tsx` trước. Sau khi submit mock thành
-công, nó mở `pages/MessengerChatModule.tsx`. Module giữ `selectedChat` cục bộ và
+`App.tsx` hiển thị `LoginScreen.tsx` trước. Sau khi backend login thành công,
+nó mở `pages/MessengerChatModule.tsx`. Module giữ `selectedChat` cục bộ và
 truyền callback vào `pages/MessengerChatList.tsx`. Khi `ChatListItem.tsx` gọi
 `onPress`, module render `pages/ChatConversationDetail.tsx`; `ChatHeader.tsx`
 gọi `onBackPress` để quay về danh sách. Cấu trúc này không cần dependency navigator
 trong hackathon và có thể thay bằng React Navigation khi app shell đã sẵn sàng.
 
 ## Integration
+
+### Authentication API contract
+
+Backend currently expects this login request:
+
+```json
+{
+  "email": "demo@kfc.local",
+  "password": "DemoPassword123!",
+  "device_id": "expo-device-id"
+}
+```
+
+It returns this response on success:
+
+```json
+{
+  "access_token": "jwt-access-token",
+  "refresh_token": "jwt-refresh-token",
+  "expires_in": 900,
+  "user": {
+    "id": "user-id",
+    "email": "demo@kfc.local",
+    "phone": "+84901234567",
+    "display_name": "Demo User"
+  }
+}
+```
+
+Copy `.env.example` to `.env` and set `EXPO_PUBLIC_API_BASE_URL` for the current
+device target. `authService.ts` maps the snake_case response to a camelCase
+`AuthSession`, then stores the tokens in Expo SecureStore.
 
 Chạy module trực tiếp bằng Expo:
 
