@@ -2,19 +2,21 @@
 
 ## Project Structure & Module Organization
 
-This repository is an early-stage hackathon workspace. The root currently contains `README.md` for the project overview and `plan.md` for working notes. Keep top-level files limited to project-wide documentation and configuration. As implementation is added, place application code under `src/`, automated checks under `tests/`, and static resources under `assets/`. Mirror source paths in the test tree where practical; for example, test `src/agents/planner.py` in `tests/agents/test_planner.py`.
+This repository is an early-stage hackathon workspace. The root contains project-wide documentation and shared static resources. Keep backend application code, database files, and backend-specific configuration under `src/backend/`; place backend checks under `src/backend/tests/` and shared static resources under `assets/`. Mirror source paths in the backend test tree where practical; for example, test `src/backend/src/agents/planner.ts` in `src/backend/tests/agents/planner.test.ts`.
 
 Update this guide and `README.md` whenever the layout or primary entry point changes. Do not commit generated output, local environments, credentials, or editor metadata; add the relevant patterns to `.gitignore` first.
 
 ## Build, Test, and Development Commands
 
-No build system, dependency manifest, or test runner has been committed yet. Before adding implementation, document the chosen toolchain in `README.md` and expose a small, predictable command set. Prefer standard commands such as:
+The database toolchain uses PostgreSQL 16 in Docker, Prisma ORM, TypeScript, and Vitest. Use the documented command set:
 
-- `make run` — start the project locally.
-- `make test` — run the complete automated test suite.
-- `make lint` — check formatting and static-analysis rules.
+- `make -C src/backend run` — start PostgreSQL locally.
+- `make -C src/backend test` — run the complete backend test suite.
+- `make -C src/backend lint` — check TypeScript and Prisma schema rules.
+- `make -C src/backend db-migrate-dev` — create and apply development migrations.
+- `make -C src/backend db-seed` — import catalog and demo business data.
 
-If `make` is not adopted, list the exact ecosystem commands here (for example, `npm test` or `pytest`). Never assume globally installed dependencies; pin them in the appropriate manifest.
+Dependencies are pinned in `src/backend/package.json`. Do not assume globally installed Prisma or TypeScript tooling.
 
 ## Coding Style & Naming Conventions
 
