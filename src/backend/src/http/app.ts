@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { OrderStatus, PrismaClient } from "@prisma/client";
 import { AuthError, AuthService } from "../auth/auth-service.js";
 import type { AuthServiceDependencies } from "../auth/auth-service.js";
+import { MenuItemService } from "../menu-items/menu-item-service.js";
 import { OrderInputError, parseQuoteInput } from "../orders/order-input.js";
 import { OrderError, OrderService } from "../orders/order-service.js";
 
@@ -11,10 +12,11 @@ type Application = { listen(port: number, host?: string): Promise<{ close(): Pro
 export function createAuthApplication(dependencies: AuthServiceDependencies, prisma?: PrismaClient): Application {
   const auth = new AuthService(dependencies);
   const orders = prisma ? new OrderService(prisma) : undefined;
+  const menuItems = prisma ? new MenuItemService(prisma) : undefined;
   return {
-    async listen(port, host = "127.0.0.1") {
-      const server = createServer((request, response) => void handle(request, response, auth, orders));
-      await new Promise<void>((resolve) => server.listen(port, host, resolve));
+    async listen(port) {
+      const server = createServer((request, response) => void handle(request, response, auth, orders, menuItems));
+      await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
       const address = server.address();
       if (!address || typeof address === "string") throw new Error("Server did not bind to a TCP port.");
       return { close: () => close(server), request: (path, options = {}) => fetch(`http://127.0.0.1:${address.port}${path}`, { method: options.method ?? "GET", headers: { ...(options.body === undefined ? {} : { "content-type": "application/json" }), ...options.headers }, body: options.body === undefined ? undefined : JSON.stringify(options.body) }) };
@@ -22,7 +24,7 @@ export function createAuthApplication(dependencies: AuthServiceDependencies, pri
   };
 }
 
-async function handle(request: IncomingMessage, response: ServerResponse, auth: AuthService, orders?: OrderService): Promise<void> {
+async function handle(request: IncomingMessage, response: ServerResponse, auth: AuthService, orders?: OrderService, menuItems?: MenuItemService): Promise<void> {
   try {
     const requestUrl = new URL(request.url ?? "/", "http://localhost");
     const path = requestUrl.pathname;
@@ -31,6 +33,10 @@ async function handle(request: IncomingMessage, response: ServerResponse, auth: 
     const principal = authenticate(request, auth);
     if (request.method === "POST" && path === "/api/auth/logout") { await auth.logout(principal); return send(response, 204); }
     if (request.method === "GET" && path === "/api/auth/me") return send(response, 200, await auth.me(principal));
+    if (request.method === "GET" && path === "/api/menu-items") {
+      if (!menuItems) return send(response, 404, { error: { code: "NOT_FOUND", message: "Route not found." } });
+      return send(response, 200, await menuItems.findByIds(readMenuItemIds(requestUrl)));
+    }
     if (!orders) return send(response, 404, { error: { code: "NOT_FOUND", message: "Route not found." } });
     if (request.method === "POST" && path === "/api/order-quotes") return send(response, 201, await orders.createQuote(principal.userId, parseQuoteInput(await readJson(request))));
     if (request.method === "POST" && path === "/api/orders") {
@@ -58,6 +64,17 @@ class ValidationError extends Error {}
 function validateString(value: unknown, field: string): asserts value is string { if (typeof value !== "string" || value.trim() === "") throw new ValidationError(`${field} is required.`); }
 function authenticate(request: IncomingMessage, service: AuthService) { const value = request.headers.authorization; if (!value?.startsWith("Bearer ")) throw new AuthError("UNAUTHORIZED", "Authentication is required."); try { return service.authenticateAccessToken(value.slice(7)); } catch { throw new AuthError("UNAUTHORIZED", "Authentication is invalid."); } }
 function parseStatus(value: string | null): OrderStatus | undefined { if (!value) return undefined; if (!(["CREATED", "CONFIRMED", "PREPARING", "DELIVERING", "COMPLETED", "CANCELLED"] as const).includes(value as OrderStatus)) throw new ValidationError("status is invalid."); return value as OrderStatus; }
+function readMenuItemIds(url: URL): string[] {
+  const raw = url.searchParams.get("ids");
+  if (!raw) throw new ValidationError("ids is required.");
+  const values = raw.split(",").map((value) => value.trim());
+  if (values.some((value) => value === "")) throw new ValidationError("ids must not contain empty values.");
+  if (values.some((value) => !isUuid(value))) throw new ValidationError("ids must contain UUID values.");
+  const ids = [...new Set(values)];
+  if (ids.length > 100) throw new ValidationError("ids must contain at most 100 values.");
+  return ids;
+}
+function isUuid(value: string): boolean { return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value); }
 function readPositiveQuery(url: URL, key: string, fallback: number, min: number, max: number): number { const value = url.searchParams.get(key); if (!value) return fallback; const parsed = Number(value); if (!Number.isInteger(parsed) || parsed < min || parsed > max) throw new ValidationError(`${key} is invalid.`); return parsed; }
 function send(response: ServerResponse, statusCode: number, body?: unknown): void { response.statusCode = statusCode; if (body === undefined) { response.end(); return; } response.setHeader("content-type", "application/json; charset=utf-8"); response.end(JSON.stringify(body)); }
 async function readJson(request: IncomingMessage): Promise<Record<string, unknown>> { let raw = ""; for await (const chunk of request) raw += chunk; try { const parsed: unknown = JSON.parse(raw); if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error(); return parsed as Record<string, unknown>; } catch { throw new ValidationError("Request body must be a JSON object."); } }

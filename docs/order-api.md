@@ -19,7 +19,9 @@ The authenticated user owns every quote and order. Clients must not send `user_i
 ## Ordering Workflow
 
 ```text
-AI resolves user language to menu_item_id and modifier_option_id
+AI resolves user language to candidate menu_item_id values
+  -> GET /api/menu-items?ids=<id1>,<id2>
+  -> validate available menu items and modifier_option_id values
   -> POST /api/order-quotes
   -> show quote total to customer
   -> customer confirms
@@ -27,7 +29,7 @@ AI resolves user language to menu_item_id and modifier_option_id
   -> GET/PATCH/DELETE /api/orders as needed
 ```
 
-The AI needs a separate catalog API to obtain valid `menu_item_id` and `modifier_option_id` values. Catalog endpoints are outside this document.
+The catalog lookup endpoint is advisory only. `POST /api/order-quotes` remains the authoritative validation of menu-item availability, pricing, and modifier ownership; `POST /api/orders` atomically rechecks and decrements stock.
 
 ## Common Errors
 
@@ -56,6 +58,56 @@ Error responses use this envelope:
 | `409` | `INSUFFICIENT_STOCK` | At least one quoted menu item no longer has enough stock. |
 | `409` | `ORDER_NOT_EDITABLE` | Delivery cannot be changed in the current status. |
 | `409` | `ORDER_NOT_CANCELLABLE` | Order cannot be cancelled in the current status. |
+
+## Read Menu Items
+
+### `GET /api/menu-items?ids={menu_item_id_1},{menu_item_id_2}`
+
+Returns up to 100 requested menu items in the same de-duplicated order as the `ids` query parameter. It requires a user access token and is intended for checking candidate order items before quote creation.
+
+`ids` is required, must be a comma-separated list of non-empty UUIDs, and may contain at most 100 distinct IDs. Invalid query values return `400 VALIDATION_ERROR`.
+
+- `items` contains only menu items that are enabled and have positive stock.
+- `missing_ids` contains requested UUIDs that do not exist.
+- `unavailable_ids` contains existing items that are disabled or out of stock.
+- Each returned item includes only available modifier options.
+
+### Response body
+
+```json
+{
+  "items": [
+    {
+      "id": "b76ec12a-3718-4fc2-b3ae-008ed299ca19",
+      "name": "Burger Zinger",
+      "description": "Spicy chicken burger",
+      "price": 55000,
+      "currency": "VND",
+      "image_url": "/assets/zinger.jpg",
+      "is_available": true,
+      "stock_quantity": 20,
+      "modifier_groups": [
+        {
+          "id": "fc262fbc-2b79-4bfe-991f-bd0462d11e26",
+          "name": "Choose a drink",
+          "min_select": 1,
+          "max_select": 1,
+          "options": [
+            {
+              "id": "419b0c35-4db4-40ba-9d58-6a0bc5754eb8",
+              "name": "Pepsi",
+              "price_delta": 0,
+              "is_available": true
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "missing_ids": ["6fb13c9a-1d3d-42f5-a214-6626e37a6288"],
+  "unavailable_ids": ["b9d22478-0084-46e0-9a66-54a3dd4c867f"]
+}
+```
 
 ## Create Quote
 
