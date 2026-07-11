@@ -4,12 +4,13 @@ import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { theme } from '../theme';
 
 interface ChatInputBarProps {
+  disabled?: boolean;
   value: string;
   onChangeText: (value: string) => void;
   onSend: () => void;
 }
 
-export function ChatInputBar({ value, onChangeText, onSend }: ChatInputBarProps) {
+export function ChatInputBar({ disabled = false, value, onChangeText, onSend }: ChatInputBarProps) {
   const hasText = value.trim().length > 0;
 
   return (
@@ -23,6 +24,7 @@ export function ChatInputBar({ value, onChangeText, onSend }: ChatInputBarProps)
       <View style={styles.inputContainer}>
         <TextInput
           accessibilityLabel="Message"
+          editable={!disabled}
           multiline
           onChangeText={onChangeText}
           placeholder="Message"
@@ -33,10 +35,10 @@ export function ChatInputBar({ value, onChangeText, onSend }: ChatInputBarProps)
       </View>
       <Pressable
         accessibilityLabel={hasText ? 'Send message' : 'Send like'}
-        disabled={false}
+        disabled={disabled || !hasText}
         hitSlop={theme.spacing.xs}
-        onPress={hasText ? onSend : undefined}
-        style={styles.sendButton}
+        onPress={hasText && !disabled ? onSend : undefined}
+        style={[styles.sendButton, disabled && styles.sendButtonDisabled]}
       >
         <Ionicons color={theme.colors.sendButton} name={hasText ? 'send' : 'thumbs-up'} size={theme.layout.iconMedium} />
       </Pressable>
@@ -87,4 +89,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: theme.layout.inputBarButtonSize,
   },
+  sendButtonDisabled: { opacity: theme.opacity.disabled },
 });

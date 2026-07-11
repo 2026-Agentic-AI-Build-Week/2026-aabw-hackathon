@@ -70,12 +70,14 @@ export class MenuItemService {
           name: link.modifierGroup.name,
           min_select: link.modifierGroup.minChoices,
           max_select: link.modifierGroup.maxChoices,
-          options: link.modifierGroup.options.map((option) => ({
-            id: option.id,
-            name: option.name,
-            price_delta: option.priceDelta,
-            is_available: true,
-          })),
+          options: link.modifierGroup.options
+            .filter((option) => option.isAvailable)
+            .map((option) => ({
+              id: option.id,
+              name: option.name,
+              price_delta: option.priceDelta,
+              is_available: true,
+            })),
         })),
       });
     }

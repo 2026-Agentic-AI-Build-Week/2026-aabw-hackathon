@@ -1,38 +1,31 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   FlatList,
   KeyboardAvoidingView,
   Platform,
   SafeAreaView,
-  StatusBar,
   StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 
-import {
-  conversationMessages,
-  kfcBotProfile,
-  type MessageDetail,
-} from '../chatData';
+import { kfcBotProfile } from '../chatData';
 import { ChatHeader } from '../components/ChatHeader';
 import { ChatInputBar } from '../components/ChatInputBar';
 import { MessageBubble } from '../components/MessageBubble';
+import { useRealtimeChat } from '../hooks/useRealtimeChat';
 import { theme } from '../theme';
+import { getSystemInsets } from '../utils/systemInsets';
 
 interface ChatConversationDetailProps {
+  accessToken: string;
   onBackPress: () => void;
 }
 
-export function ChatConversationDetail({ onBackPress }: ChatConversationDetailProps) {
-  const [messages, setMessages] = useState<MessageDetail[]>(conversationMessages);
+export function ChatConversationDetail({ accessToken, onBackPress }: ChatConversationDetailProps) {
   const [draft, setDraft] = useState('');
-
-  const invertedMessages = useMemo(() => [...messages].reverse(), [messages]);
-  const androidStatusBarInset = Platform.OS === 'android'
-    ? StatusBar.currentHeight ?? theme.spacing.xl
-    : undefined;
-  const androidBottomInset = Platform.OS === 'android'
-    ? theme.spacing.sm
-    : undefined;
+  const { connectionStatus, errorMessage, messages, retryMessage, sendMessage, typingLabel } = useRealtimeChat(accessToken);
+  const systemInsets = getSystemInsets();
 
   const handleSend = () => {
     const trimmedDraft = draft.trim();
@@ -41,15 +34,7 @@ export function ChatConversationDetail({ onBackPress }: ChatConversationDetailPr
       return;
     }
 
-    const message: MessageDetail = {
-      id: `message-${Date.now()}`,
-      sender: 'user',
-      status: 'sent',
-      text: trimmedDraft,
-      timestamp: 'Now',
-    };
-
-    setMessages((currentMessages) => [...currentMessages, message]);
+    sendMessage(trimmedDraft);
     setDraft('');
   };
 
@@ -58,8 +43,8 @@ export function ChatConversationDetail({ onBackPress }: ChatConversationDetailPr
       style={[
         styles.safeArea,
         {
-          paddingBottom: androidBottomInset,
-          paddingTop: androidStatusBarInset,
+          paddingBottom: systemInsets.bottom,
+          paddingTop: systemInsets.top,
         },
       ]}
     >
@@ -72,14 +57,15 @@ export function ChatConversationDetail({ onBackPress }: ChatConversationDetailPr
         />
         <FlatList
           contentContainerStyle={styles.listContent}
-          data={invertedMessages}
+          data={messages}
           inverted
           keyExtractor={(message) => message.id}
           keyboardShouldPersistTaps="handled"
-          renderItem={({ item }) => <MessageBubble botAvatarUrl={kfcBotProfile.avatarUrl} message={item} />}
+          renderItem={({ item }) => <MessageBubble botAvatarUrl={kfcBotProfile.avatarUrl} message={item} onRetry={retryMessage} />}
           showsVerticalScrollIndicator={false}
           style={styles.list}
         />
+        {(typingLabel || errorMessage || connectionStatus !== 'connected') && <View style={styles.realtimeStatus}><Text style={styles.realtimeStatusText}>{errorMessage ?? typingLabel ?? (connectionStatus === 'connecting' ? 'Connecting…' : 'Reconnecting…')}</Text></View>}
         <ChatInputBar onChangeText={setDraft} onSend={handleSend} value={draft} />
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -101,5 +87,14 @@ const styles = StyleSheet.create({
   listContent: {
     paddingBottom: theme.spacing.md,
     paddingTop: theme.spacing.md,
+  },
+  realtimeStatus: {
+    backgroundColor: theme.colors.chatCanvas,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.xs,
+  },
+  realtimeStatusText: {
+    color: theme.colors.textSecondary,
+    ...theme.typography.messageStatus,
   },
 });

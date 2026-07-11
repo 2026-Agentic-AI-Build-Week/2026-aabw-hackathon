@@ -1,82 +1,218 @@
 # KFC Conversational Ordering
 
-Database foundation for the Vietnamese conversational ordering MVP described in
-`plan.md`. The repository uses PostgreSQL 16 in Docker and Prisma ORM with a
-TypeScript seed pipeline.
+Full-stack hackathon workspace for a KFC conversational-ordering MVP. The
+repository contains a PostgreSQL/Prisma backend for authentication, menu lookup,
+order quotes, stock-aware order creation, and order management, plus an Expo
+React Native mobile app with Messenger-inspired login and chat flows.
+
+## Current Scope
+
+| Area | Current implementation |
+| --- | --- |
+| Authentication | Email/password login, token refresh, logout, profile lookup, and Expo SecureStore session persistence. |
+| Menu | Authenticated lookup of candidate menu item IDs, including unavailable and missing item classification. |
+| Orders | Quote creation, idempotent order creation, delivery updates, cancellation, pagination, and order-status filtering. |
+| Inventory | Available stock is seeded and checked before order creation; stock is decremented atomically. |
+| Mobile | Expo login flow, searchable Messenger-style chat list, and authenticated realtime KFC Bot conversation. |
+| Realtime chat | Socket.IO text chat persists a per-user session and uses OpenAI menu assistance when configured; a deterministic demo fallback is used without an AI key in development. |
 
 ## Prerequisites
 
-- Docker with Docker Compose
-- Node.js 22+
-- npm
+- Node.js 22+ and npm
+- Docker Engine with Docker Compose
+- For mobile: Expo Go on a physical device, or an Android emulator / iOS Simulator
 
-## Local setup
+## Quick Start
+
+Run the backend and mobile app in separate terminals from the repository root.
+
+### 1. Configure and start PostgreSQL
 
 ```bash
 cp src/backend/.env.example src/backend/.env
 npm --prefix src/backend install
-make -C src/backend db-up
-make -C src/backend db-migrate-dev
-make -C src/backend db-seed
+docker compose --env-file src/backend/.env -f src/backend/docker-compose.yml up -d
 ```
 
-The seed is idempotent and imports all 8 categories and 94 menu items from
-`assets/data/kfc_catalog.json`. It also creates demo modifiers, users with
-required email and phone fields, addresses, OTP state, loyalty, voucher cases,
-and an order for operations metrics.
+### 2. Prepare the backend database
 
-## Commands
+```bash
+npm --prefix src/backend run db:generate
+npm --prefix src/backend run db:migrate
+npm --prefix src/backend run db:seed
+```
 
-- `npm --prefix src/frontend-mobile install` — install Expo mobile dependencies.
-- `npm --prefix src/frontend-mobile start` — start the Expo development server.
-- `make -C src/backend db-up` — start PostgreSQL.
-- `make -C src/backend db-down` — stop services and retain the database volume.
-- `make -C src/backend db-migrate` — deploy committed Prisma migrations.
-- `make -C src/backend db-migrate-dev` — create/apply development migrations.
-- `make -C src/backend db-seed` — run the idempotent demo seed.
-- `make -C src/backend db-reset` — reset, migrate, and seed the local database.
-- `make -C src/backend test` — run the backend automated tests.
-- `make -C src/backend lint` — run TypeScript and Prisma schema checks.
-- `make -C src/backend run` — start required local infrastructure.
+The seed is idempotent. It imports the catalog and demo business data, then
+creates active and blocked test users.
 
-## Layout
+### 3. Run the backend API
 
-- `src/backend/` — self-contained backend package and database toolchain.
-- `src/frontend-mobile/` — React Native/Expo Messenger chat-list module.
-- `src/frontend-mobile/pages/MessengerChatModule.tsx` — mobile module entry point and list/detail navigation.
-- `src/frontend-mobile/theme.ts` — shared mobile design tokens.
-- `src/backend/prisma/schema.prisma` — relational schema and constraints.
-- `src/backend/prisma/seed.ts` — catalog and deterministic demo data.
-- `src/backend/src/lib/normalization.ts` — canonical email and phone handling.
-- `src/backend/tests/` — backend automated checks.
-- `assets/data/kfc_catalog.json` — source catalog snapshot.
+```bash
+npm --prefix src/backend run dev
+```
 
-## Data rules
+The development API listens on port `3000`. `HOST=0.0.0.0` in the backend env
+allows Android/iOS devices on the local network to reach it. If port `3000` is
+already occupied, stop the process using it or choose another `PORT` and update
+the mobile API base URL to match.
 
-- Registered users require unique email and normalized phone values; email is
-  trimmed and lowercased before every user lookup or write.
-- Prices and discounts are integer VND amounts.
-- OTP values are represented by hashes only; logs and transcripts store redacted
-  content.
-- Quotes and orders contain immutable price, voucher, item, email, phone, and
-  delivery snapshots.
-- The AI ordering flow does not expose or persist carts. It creates an
-  `OrderQuote` directly from catalog item and modifier IDs, asks the customer
-  to confirm the quote, then creates one immutable order from that quote.
-- Unique event, quote, and idempotency keys prevent duplicate webhook processing
-  and duplicate orders.
-- Business services must validate voucher eligibility and confirmation tokens
-  before writing orders.
+- `POST /api/auth/login`
+- `POST /api/auth/refresh`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
+- `GET /api/menu-items?ids=<uuid>,<uuid>`
+- `POST /api/order-quotes`
+- `POST /api/orders`
+- `GET /api/orders`
+- `GET /api/orders/:id`
+- `PATCH /api/orders/:id/delivery`
+- `DELETE /api/orders/:id`
 
-## Order API
+### 4. Configure the Expo app
 
-All routes require `Authorization: Bearer <access_token>`.
+```bash
+cp src/frontend-mobile/.env.example src/frontend-mobile/.env
+npm --prefix src/frontend-mobile install
+```
 
-- `POST /api/order-quotes` creates a 15-minute quote from a conversation
-  session, catalog item IDs, modifier IDs, quantities, and delivery details.
-- `POST /api/orders` consumes `{ quote_id, confirmation_token }` and requires
-  an `Idempotency-Key` header.
-- `GET /api/orders` lists the current user's orders; `GET /api/orders/{id}`
-  returns immutable snapshots and status history.
-- `PATCH /api/orders/{id}/delivery` updates delivery while status is `CREATED`.
-- `DELETE /api/orders/{id}` cancels an order in `CREATED` or `CONFIRMED`.
+Set `EXPO_PUBLIC_API_BASE_URL` in `src/frontend-mobile/.env` for the device
+target you use:
+
+```dotenv
+# Android Emulator
+EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000
+EXPO_PUBLIC_SOCKET_URL=http://10.0.2.2:3000
+
+# iOS Simulator
+# EXPO_PUBLIC_API_BASE_URL=http://localhost:3000
+```
+
+For a physical device, set the mobile URL to the development machine's LAN IP,
+for example `http://192.168.1.10:3000`, and keep both devices on the same Wi-Fi.
+Use the same value for both variables. `AI_API_KEY` is optional for the hackathon
+demo; leave it blank to use the deterministic local KFC assistant.
+
+Choose the AI provider only in `src/backend/.env`:
+
+```dotenv
+# Direct OpenAI
+AI_PROVIDER=openai
+AI_API_KEY=sk-...
+AI_MODEL_NAME=gpt-4.1-mini
+AI_MAX_OUTPUT_TOKENS=1024
+
+# Or OpenRouter
+# AI_PROVIDER=openrouter
+# AI_API_KEY=sk-or-v1-...
+# AI_MODEL_NAME=google/gemini-2.5-flash
+# AI_MAX_OUTPUT_TOKENS=1024
+```
+
+Restart the backend after changing providers or models. Never add the AI key to
+an `EXPO_PUBLIC_*` variable because those values are bundled into the mobile app.
+
+### 5. Run the mobile app
+
+```bash
+npm --prefix src/frontend-mobile start -- --clear
+```
+
+Scan the generated QR code in Expo Go, or press `a` to open an Android emulator.
+For LAN mode, the phone and development machine must be on the same Wi-Fi. Use
+`--tunnel` when LAN discovery is unavailable.
+
+## Demo Login
+
+After running the database seed, use this active account in the mobile login
+screen:
+
+```text
+Email:    customer1@example.com
+Password: DemoPassword123!
+```
+
+`blocked@example.com` uses the same password and is intended to verify the
+unavailable-account error path.
+
+## Verification
+
+```bash
+# Backend type checks and Prisma schema validation
+npm --prefix src/backend run lint
+
+# Backend unit and HTTP API tests
+npm --prefix src/backend run test
+
+# Expo TypeScript and Android bundle checks
+npm --prefix src/frontend-mobile run typecheck
+npm --prefix src/frontend-mobile exec expo export -- --platform android --output-dir /tmp/kfc-mobile-export
+```
+
+## Useful Commands
+
+| Area | Command | Purpose |
+| --- | --- | --- |
+| Database | `docker compose --env-file src/backend/.env -f src/backend/docker-compose.yml up -d` | Start PostgreSQL 16. |
+| Database | `docker compose --env-file src/backend/.env -f src/backend/docker-compose.yml down` | Stop PostgreSQL and retain its volume. |
+| Backend | `npm --prefix src/backend run dev` | Run the API with file watching. |
+| Backend | `npm --prefix src/backend run db:migrate` | Apply committed Prisma migrations. |
+| Backend | `npm --prefix src/backend run db:migrate:dev` | Create and apply a development migration. |
+| Backend | `npm --prefix src/backend run db:seed` | Seed catalog and demo data. |
+| Backend | `npm --prefix src/backend run db:reset` | Reset, migrate, and seed the local database. |
+| Mobile | `npm --prefix src/frontend-mobile start` | Start Expo Metro. |
+| Mobile | `npm --prefix src/frontend-mobile run android` | Open the Expo app on Android. |
+| Mobile | `npm --prefix src/frontend-mobile run typecheck` | Run strict TypeScript checks. |
+
+## Repository Layout
+
+```text
+assets/
+├── data/kfc_catalog.json             # Seed catalog source
+└── image/                            # Shared product and brand assets
+src/
+├── backend/
+│   ├── prisma/                       # Schema, migrations, and seed pipeline
+│   ├── src/auth/                     # Password hashing, sessions, JWT services
+│   ├── src/http/app.ts               # HTTP router and common error envelope
+│   ├── src/menu-items/               # Menu candidate-ID lookup service
+│   ├── src/orders/                   # Quote, order, stock, and delivery logic
+│   └── tests/                        # Auth, menu, and order automated tests
+└── frontend-mobile/
+    ├── App.tsx                       # Expo root and authenticated app gate
+    ├── LoginScreen.tsx               # Email/password API login screen
+    ├── services/authService.ts        # Axios auth API and Expo SecureStore tokens
+    ├── pages/                        # Login/chat route-level screens
+    ├── components/                   # Reusable mobile UI components
+    ├── theme.ts                      # Shared design tokens
+    ├── AGENTS.md                     # Scoped guide for coding agents
+    └── README.md                     # Detailed mobile-module documentation
+```
+
+## Authentication Contract
+
+The mobile app sends this request to `POST /api/auth/login`:
+
+```json
+{
+  "email": "customer1@example.com",
+  "password": "DemoPassword123!",
+  "device_id": "expo-device-id"
+}
+```
+
+On success the API returns `access_token`, `refresh_token`, `expires_in`, and a
+public `user` object. The app maps this response to its `AuthSession` type and
+stores tokens in Expo SecureStore. Do not commit `.env` files, secrets, generated
+Expo state, native build output, or dependency directories.
+
+## Environment Notes
+
+- Keep `src/backend/.env` and `src/frontend-mobile/.env` local only. Start from
+  their respective `.env.example` files.
+- `AUTH_ACCESS_TOKEN_SECRET`, `AUTH_REFRESH_TOKEN_SECRET`, and
+  `AUTH_TOKEN_PEPPER` must be unique development secrets. The pepper is an
+  additional server-side secret used while deriving password hashes; it must not
+  be sent to the mobile app.
+- Android emulators reach a local backend through `http://10.0.2.2:<port>`.
+  Physical devices require the development machine's LAN IP and the same Wi-Fi,
+  unless Expo tunnel mode is used for Metro access.
