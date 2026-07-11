@@ -62,6 +62,14 @@ export class OrderService {
       if (quote.status !== "ACTIVE" || quote.expiresAt <= this.now()) throw new OrderError("QUOTE_EXPIRED", "Order quote has expired.", 409);
       if (hash(confirmationToken) !== quote.confirmationTokenHash) throw new OrderError("INVALID_CONFIRMATION_TOKEN", "Confirmation token is invalid.", 409);
       if (!quote.deliveryDetail) throw new OrderError("VALIDATION_ERROR", "Quote delivery detail is missing.", 400);
+      for (const item of quote.items) {
+        if (!item.menuItemId) continue;
+        const result = await transaction.menuItem.updateMany({
+          where: { id: item.menuItemId, isAvailable: true, stockQuantity: { gte: item.quantity } },
+          data: { stockQuantity: { decrement: item.quantity } },
+        });
+        if (result.count !== 1) throw new OrderError("INSUFFICIENT_STOCK", "A menu item does not have enough stock.", 409);
+      }
       const order = await transaction.order.create({ data: {
         orderNumber: `KFC-${this.now().toISOString().slice(0, 10).replaceAll("-", "")}-${randomBytes(4).toString("hex").toUpperCase()}`,
         userId, sessionId: quote.sessionId, quoteId: quote.id, subtotal: quote.subtotal, discountAmount: quote.discountAmount, deliveryFee: quote.deliveryFee, total: quote.total, currency: quote.currency, voucherCodeSnapshot: quote.voucherCode, idempotencyKey, channelSnapshot: quote.session.channel,

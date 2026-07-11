@@ -53,6 +53,7 @@ Error responses use this envelope:
 | `409` | `QUOTE_CONSUMED` | Quote has already created an order. |
 | `409` | `INVALID_CONFIRMATION_TOKEN` | Quote confirmation token does not match. |
 | `409` | `IDEMPOTENCY_CONFLICT` | The idempotency key was used for another user or quote. |
+| `409` | `INSUFFICIENT_STOCK` | At least one quoted menu item no longer has enough stock. |
 | `409` | `ORDER_NOT_EDITABLE` | Delivery cannot be changed in the current status. |
 | `409` | `ORDER_NOT_CANCELLABLE` | Order cannot be cancelled in the current status. |
 
@@ -138,7 +139,7 @@ Store `confirmation_token` only until the customer explicitly confirms. It is no
 
 ### `POST /api/orders`
 
-Consumes exactly one active quote and copies its financial, item, modifier, and delivery snapshots into an immutable order.
+Consumes exactly one active quote, atomically validates and decrements menu-item stock, and copies its financial, item, modifier, and delivery snapshots into an immutable order. Quote creation does not reserve stock.
 
 ### Headers
 
