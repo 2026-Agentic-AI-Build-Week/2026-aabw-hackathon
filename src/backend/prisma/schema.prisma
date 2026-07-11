@@ -70,12 +70,6 @@ enum MessageRole {
   SYSTEM
 }
 
-enum CartStatus {
-  ACTIVE
-  CONVERTED
-  ABANDONED
-}
-
 enum QuoteStatus {
   ACTIVE
   CONSUMED
@@ -136,7 +130,6 @@ model MenuItem {
   updatedAt              DateTime                  @updatedAt @map("updated_at") @db.Timestamptz(3)
   categories             MenuItemCategory[]
   modifierGroups         MenuItemModifierGroup[]
-  cartItems              CartItem[]
 
   @@index([slug])
   @@index([isAvailable, itemType])
@@ -179,7 +172,6 @@ model ModifierOption {
   isAvailable    Boolean            @default(true) @map("is_available")
   displayOrder   Int                @default(0) @map("display_order")
   group          ModifierGroup      @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  cartModifiers  CartItemModifier[]
 
   @@unique([groupId, code])
   @@index([groupId, isAvailable])
@@ -217,7 +209,7 @@ model User {
   voucherCodes        VoucherCode[]
   voucherRedemptions  VoucherRedemption[]
   sessions            ConversationSession[]
-  carts               Cart[]
+  quotes              OrderQuote[]
   orders              Order[]
   handoffs            Handoff[]
   auditLogs           AuditLog[]
@@ -378,7 +370,7 @@ model ConversationSession {
   updatedAt            DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
   user                 User?                 @relation(fields: [userId], references: [id], onDelete: SetNull)
   messages             ConversationMessage[]
-  carts                Cart[]
+  quotes               OrderQuote[]
   orders               Order[]
   handoffs             Handoff[]
   auditLogs            AuditLog[]
@@ -418,60 +410,10 @@ model ProcessedChannelEvent {
   @@map("processed_channel_events")
 }
 
-model Cart {
-  id        String              @id @default(uuid()) @db.Uuid
-  sessionId String              @map("session_id") @db.Uuid
-  userId    String?             @map("user_id") @db.Uuid
-  status    CartStatus          @default(ACTIVE)
-  version   Int                 @default(1)
-  createdAt DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
-  session   ConversationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  user      User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
-  items     CartItem[]
-  quotes    OrderQuote[]
-
-  @@index([sessionId, status])
-  @@index([userId])
-  @@map("carts")
-}
-
-model CartItem {
-  id               String             @id @default(uuid()) @db.Uuid
-  cartId           String             @map("cart_id") @db.Uuid
-  menuItemId       String             @map("menu_item_id") @db.Uuid
-  quantity         Int
-  unitPrice        Int                @map("unit_price")
-  itemNameSnapshot String             @map("item_name_snapshot")
-  createdAt        DateTime           @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt        DateTime           @updatedAt @map("updated_at") @db.Timestamptz(3)
-  cart             Cart               @relation(fields: [cartId], references: [id], onDelete: Cascade)
-  menuItem         MenuItem           @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
-  modifiers        CartItemModifier[]
-
-  @@index([cartId])
-  @@index([menuItemId])
-  @@map("cart_items")
-}
-
-model CartItemModifier {
-  id               String         @id @default(uuid()) @db.Uuid
-  cartItemId       String         @map("cart_item_id") @db.Uuid
-  modifierOptionId String?        @map("modifier_option_id") @db.Uuid
-  nameSnapshot     String         @map("name_snapshot")
-  priceDelta       Int            @map("price_delta")
-  quantity         Int            @default(1)
-  cartItem         CartItem       @relation(fields: [cartItemId], references: [id], onDelete: Cascade)
-  modifierOption   ModifierOption? @relation(fields: [modifierOptionId], references: [id], onDelete: SetNull)
-
-  @@index([cartItemId])
-  @@map("cart_item_modifiers")
-}
-
 model OrderQuote {
   id                    String           @id @default(uuid()) @db.Uuid
-  cartId                String           @map("cart_id") @db.Uuid
-  cartVersion           Int              @map("cart_version")
+  userId                String           @map("user_id") @db.Uuid
+  sessionId             String           @map("session_id") @db.Uuid
   voucherCode           String?          @map("voucher_code")
   subtotal              Int
   discountAmount        Int              @default(0) @map("discount_amount")
@@ -482,13 +424,32 @@ model OrderQuote {
   expiresAt             DateTime         @map("expires_at") @db.Timestamptz(3)
   status                QuoteStatus      @default(ACTIVE)
   createdAt             DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
-  cart                  Cart             @relation(fields: [cartId], references: [id], onDelete: Restrict)
+  user                  User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  session               ConversationSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
   items                 OrderQuoteItem[]
+  deliveryDetail        OrderQuoteDeliveryDetail?
   order                 Order?
 
-  @@index([cartId, status])
+  @@index([userId, status])
+  @@index([sessionId])
   @@index([status, expiresAt])
   @@map("order_quotes")
+}
+
+model OrderQuoteDeliveryDetail {
+  id              String     @id @default(uuid()) @db.Uuid
+  quoteId         String     @unique @map("quote_id") @db.Uuid
+  emailSnapshot   String     @map("email_snapshot")
+  recipientName   String     @map("recipient_name")
+  phoneSnapshot   String     @map("phone_snapshot")
+  phoneNormalized String     @map("phone_normalized")
+  addressLine     String     @map("address_line")
+  ward            String?
+  district        String?
+  city            String
+  quote           OrderQuote @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+
+  @@map("order_quote_delivery_details")
 }
 
 model OrderQuoteItem {

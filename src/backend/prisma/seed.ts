@@ -268,23 +268,11 @@ async function seedOrder(input: {
     create: { sessionKey: input.sessionKey, channel: input.channel, userId: user.id, businessState: "ORDER_CREATED" },
   });
   const menuItem = await prisma.menuItem.findFirstOrThrow({ where: { isAvailable: true }, orderBy: { externalId: "asc" } });
-  const cart = await prisma.cart.findFirst({ where: { sessionId: session.id, status: "CONVERTED" } })
-    ?? await prisma.cart.create({ data: { sessionId: session.id, userId: user.id, status: "CONVERTED" } });
   const subtotal = menuItem.price * 2;
-  await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
-  await prisma.cartItem.create({
-    data: {
-      cartId: cart.id,
-      menuItemId: menuItem.id,
-      quantity: 2,
-      unitPrice: menuItem.price,
-      itemNameSnapshot: menuItem.name,
-    },
-  });
   const quote = await prisma.orderQuote.upsert({
     where: { confirmationTokenHash: input.confirmationTokenHash },
-    update: { cartId: cart.id, cartVersion: cart.version, subtotal, total: subtotal, status: "CONSUMED" },
-    create: { cartId: cart.id, cartVersion: cart.version, subtotal, total: subtotal, confirmationTokenHash: input.confirmationTokenHash, expiresAt: new Date(now.getTime() + day), status: "CONSUMED" },
+    update: { userId: user.id, sessionId: session.id, subtotal, total: subtotal, status: "CONSUMED" },
+    create: { userId: user.id, sessionId: session.id, subtotal, total: subtotal, confirmationTokenHash: input.confirmationTokenHash, expiresAt: new Date(now.getTime() + day), status: "CONSUMED" },
   });
   await prisma.orderQuoteItem.deleteMany({ where: { quoteId: quote.id } });
   await prisma.orderQuoteItem.create({ data: { quoteId: quote.id, menuItemId: menuItem.id, itemName: menuItem.name, quantity: 2, unitPrice: menuItem.price, lineTotal: subtotal } });
@@ -297,6 +285,11 @@ async function seedOrder(input: {
   await prisma.orderItem.deleteMany({ where: { orderId: order.id } });
   await prisma.orderItem.create({ data: { orderId: order.id, menuItemId: menuItem.id, itemName: menuItem.name, quantity: 2, unitPrice: menuItem.price, lineTotal: subtotal } });
   const address = await prisma.userAddress.findFirstOrThrow({ where: { userId: user.id, isDefault: true } });
+  await prisma.orderQuoteDeliveryDetail.upsert({
+    where: { quoteId: quote.id },
+    update: { emailSnapshot: "customer1@example.com", recipientName: address.recipientName, phoneSnapshot: address.phone, phoneNormalized: address.phoneNormalized, addressLine: address.addressLine, ward: address.ward, district: address.district, city: address.city },
+    create: { quoteId: quote.id, emailSnapshot: "customer1@example.com", recipientName: address.recipientName, phoneSnapshot: address.phone, phoneNormalized: address.phoneNormalized, addressLine: address.addressLine, ward: address.ward, district: address.district, city: address.city },
+  });
   await prisma.orderDeliveryDetail.upsert({
     where: { orderId: order.id },
     update: { emailSnapshot: "customer1@example.com", recipientName: address.recipientName, phoneSnapshot: address.phone, phoneNormalized: address.phoneNormalized, addressLine: address.addressLine, ward: address.ward, district: address.district, city: address.city, sourceAddressId: address.id },
