@@ -60,7 +60,23 @@ and an order for operations metrics.
   content.
 - Quotes and orders contain immutable price, voucher, item, email, phone, and
   delivery snapshots.
+- The AI ordering flow does not expose or persist carts. It creates an
+  `OrderQuote` directly from catalog item and modifier IDs, asks the customer
+  to confirm the quote, then creates one immutable order from that quote.
 - Unique event, quote, and idempotency keys prevent duplicate webhook processing
   and duplicate orders.
-- Business services must validate OTP, voucher eligibility, cart versions, and
-  confirmation tokens before writing orders.
+- Business services must validate voucher eligibility and confirmation tokens
+  before writing orders.
+
+## Order API
+
+All routes require `Authorization: Bearer <access_token>`.
+
+- `POST /api/order-quotes` creates a 15-minute quote from a conversation
+  session, catalog item IDs, modifier IDs, quantities, and delivery details.
+- `POST /api/orders` consumes `{ quote_id, confirmation_token }` and requires
+  an `Idempotency-Key` header.
+- `GET /api/orders` lists the current user's orders; `GET /api/orders/{id}`
+  returns immutable snapshots and status history.
+- `PATCH /api/orders/{id}/delivery` updates delivery while status is `CREATED`.
+- `DELETE /api/orders/{id}` cancels an order in `CREATED` or `CONFIRMED`.
