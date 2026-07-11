@@ -7,7 +7,7 @@ The executable database design is defined in
 - Prisma ORM owns schema, migrations, generated client, and seed execution.
 - `User` requires unique email and phone; the application trims and lowercases
   email before every lookup or write.
-- Catalog, modifiers, identity, OTP, loyalty, voucher, session, cart, quote,
+- Catalog, modifiers, identity, password auth, loyalty, voucher, session, cart, quote,
   order, handoff, and audit data are normalized into dedicated models.
 - Historical order data uses snapshots so later menu, voucher, address, or user
   changes do not alter completed orders.

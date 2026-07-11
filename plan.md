@@ -6,7 +6,7 @@ Xây dựng Mobile App English-first cho phép khách hàng:
 
 - Tìm món, hỏi giá và tùy chọn món bằng text hoặc voice note.
 - Thêm, sửa, xóa và xem giỏ hàng.
-- Đăng nhập bằng số điện thoại và OTP giả lập để nhận JWT.
+- Đăng nhập bằng email và mật khẩu để nhận JWT.
 - Tra cứu điểm loyalty, kiểm tra và áp dụng voucher.
 - Xác nhận rồi tạo đơn trong mock OMS.
 - Xem, theo dõi và hủy đơn của chính mình.
@@ -49,7 +49,7 @@ Backend, không phải prompt hay REST controller, chịu trách nhiệm kiểm 
 
 - Mobile: React Native, Expo, TypeScript, Expo Router, Zustand hoặc Context + reducer, Expo SecureStore cho token, AsyncStorage cho `session_id` và UI cache, Expo AV/Audio cho voice recording.
 - Backend: TypeScript, REST API validation, Prisma ORM và PostgreSQL.
-- Auth: OTP giả lập trong non-production, access JWT ngắn hạn và refresh token có thể thu hồi theo `device_id`.
+- Auth: email/mật khẩu, access JWT ngắn hạn và refresh token có thể thu hồi theo `device_id`.
 - AI: OpenAI Responses API với strict function schemas. Mặc định `gpt-5.6-luna`; fallback lần lượt `gpt-5.4-mini`, `gpt-4.1-mini` nếu tài khoản không có model mặc định. Voice note dùng OpenAI Whisper/Audio Transcriptions để chuyển thành text trước khi vào pipeline LLM.
 - Deploy: một backend HTTPS public và Mobile App chạy Expo Go, development build hoặc Android/iOS build.
 - Không dùng Redis, vector database, RAG framework hoặc message broker trong MVP.
@@ -60,12 +60,11 @@ Mobile App render response động gồm message, quick replies, Cart Card và O
 
 ### Auth API
 
-- `POST /api/auth/otp/request` nhận `{phone}`; chuẩn hóa số điện thoại, tạo hoặc tái sử dụng OTP challenge và trả `{challenge_id, expires_at}`.
-- `POST /api/auth/otp/verify` nhận `{challenge_id, otp, device_id}`; xác minh OTP, tạo hoặc cập nhật user-device session và trả `{access_token, refresh_token, expires_in, user}`.
+- `POST /api/auth/login` nhận `{email, password, device_id}`; xác minh thông tin đăng nhập, tạo hoặc cập nhật user-device session và trả `{access_token, refresh_token, expires_in, user}`.
 - `POST /api/auth/refresh` nhận `{refresh_token, device_id}`; xoay refresh token và trả access/refresh token mới.
 - `POST /api/auth/logout` yêu cầu JWT; thu hồi refresh token của thiết bị hiện tại.
 - `GET /api/auth/me` yêu cầu JWT; trả hồ sơ người dùng và trạng thái loyalty cơ bản.
-- OTP chỉ xuất hiện trong response mock/development có cờ môi trường rõ ràng; không ghi OTP, refresh token hoặc số điện thoại đầy đủ vào log.
+- Không ghi mật khẩu, password hash, refresh token hoặc email đầy đủ vào log.
 
 ### Order CRUD API
 
@@ -113,8 +112,7 @@ Mobile App render response động gồm message, quick replies, Cart Card và O
 - `get_menu_item(item_id)`
 - `update_cart(action, item_id, quantity, modifiers)`
 - `view_cart()`
-- `request_otp(phone)`
-- `verify_otp(phone, otp)`
+- `login(email, password)`
 - `get_loyalty_points()`
 - `list_available_vouchers()`
 - `apply_voucher(code)`
@@ -123,7 +121,7 @@ Mobile App render response động gồm message, quick replies, Cart Card và O
 - `create_order(confirmation_token, idempotency_key)`
 - `request_handoff(reason)`
 
-Tất cả tool trả về structured result gồm `success`, `code`, `message` và `data`. Tool không ném lỗi kỹ thuật trực tiếp vào hội thoại. `request_otp` và `verify_otp` dùng chung Auth application service; token không được đưa vào transcript.
+Tất cả tool trả về structured result gồm `success`, `code`, `message` và `data`. Tool không ném lỗi kỹ thuật trực tiếp vào hội thoại. `login` dùng chung Auth application service; token và mật khẩu không được đưa vào transcript.
 
 ### Adapter nghiệp vụ
 
@@ -145,7 +143,7 @@ Mock service cung cấp menu, modifier, hồ sơ khách hàng, voucher, điểm 
 - Nếu có nhiều món phù hợp, bot hỏi lại thay vì tự chọn.
 - Mọi giá, giảm giá, điểm và tổng tiền phải xuất phát từ tool result.
 - Trước khi tạo đơn, bot hiển thị món, số lượng, giá, voucher, tổng tiền, người nhận và địa chỉ rồi yêu cầu xác nhận rõ ràng.
-- OTP demo chỉ hoạt động trong môi trường non-production; không ghi OTP hoặc số điện thoại đầy đủ vào log.
+- Không đưa mật khẩu, token hoặc dữ liệu xác thực nhạy cảm vào hội thoại hay log.
 - Handoff khi người dùng yêu cầu nhân viên, model không chọn được tool phù hợp, lỗi ngoại vi lặp lại hoặc confidence thấp sau một câu hỏi làm rõ.
 - Khi voice transcription thất bại, bot yêu cầu gửi lại bằng text hoặc voice; không làm mất giỏ hàng hoặc conversation state.
 
@@ -154,7 +152,7 @@ Mock service cung cấp menu, modifier, hồ sơ khách hàng, voucher, điểm 
 ### Giờ 0–2: khóa API contract và Mobile shell
 
 - Người 1: khóa State Machine, tool schemas, response model Chat và shared application-service boundaries.
-- Người 2: khóa schema/contract Auth JWT + OTP và persistence cho user-device refresh session.
+- Người 2: khóa schema/contract Auth JWT + email/mật khẩu và persistence cho user-device refresh session.
 - Người 3: khóa Order CRUD contract, ownership policy, idempotency và transition policy.
 - Người 4 — Mobile UI Developer: dựng Chat UI, message list, text composer, Quick Reply, Cart Card và Order Status trên simulator/thiết bị.
 - Người 5 — Mobile Core Developer: tạo Expo app shell, session/token storage abstraction, API client, login flow và smoke call.
@@ -164,12 +162,12 @@ Mock service cung cấp menu, modifier, hồ sơ khách hàng, voucher, điểm 
 ### Giờ 2–8: xây các lát cắt độc lập
 
 - Người 1: OpenAI orchestration, strict function calling, cart/quote conversation flow và tool error mapping.
-- Người 2: OTP request/verify, JWT refresh/logout/me, refresh-token revocation và mock identity/loyalty.
+- Người 2: email/password login, JWT refresh/logout/me, refresh-token revocation và mock identity/loyalty.
 - Người 3: create/list/detail/cancel Order API, admin status update, quote validation và idempotency.
 - Người 4: hoàn thiện native dynamic components, trạng thái loading/error/empty và màn hình order history/detail.
 - Người 5: state management, protected navigation, token refresh, chat retry, audio permission/recording/base64 upload.
 - Người 6: mock catalog/voucher/OMS, observability, API integration support và demo data.
-- **Checkpoint giờ 8:** Đăng nhập OTP, gửi text chat, thêm món, xem Cart Card và xem order list đã hoạt động trên Mobile.
+- **Checkpoint giờ 8:** Đăng nhập email/mật khẩu, gửi text chat, thêm món, xem Cart Card và xem order list đã hoạt động trên Mobile.
 
 ### Giờ 8–14: tích hợp end-to-end
 
