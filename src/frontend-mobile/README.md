@@ -88,9 +88,11 @@ It returns this response on success:
 }
 ```
 
-Copy `.env.example` to `.env` and set `EXPO_PUBLIC_API_BASE_URL` for the current
-device target. `authService.ts` maps the snake_case response to a camelCase
-`AuthSession`, then stores the tokens in Expo SecureStore.
+Copy `.env.example` to `.env` and set both `EXPO_PUBLIC_API_BASE_URL` and
+`EXPO_PUBLIC_SOCKET_URL` for the current device target. `authService.ts` maps
+the snake_case response to a camelCase `AuthSession`, then stores the tokens in
+Expo SecureStore. `useRealtimeChat.ts` sends that access token in the Socket.IO
+handshake, receives persisted history, and manages optimistic send/retry states.
 
 Chạy module trực tiếp bằng Expo:
 
@@ -111,6 +113,7 @@ export default function App() {
 }
 ```
 
-Để nối backend, giữ `ChatMessage` và `MessageDetail` làm DTO hiển thị. Thay
-`chatData` bằng hook API trả về dữ liệu tương ứng, và thay state navigation trong
-`MessengerChatModule.tsx` bằng route params `chat.id` của React Navigation.
+The KFC Ordering Bot is always pinned to the first list item. The MVP only
+supports realtime menu-assistant text chat; quote/order mutations and voice
+calling are deliberately deferred. Future voice must reuse the same backend
+conversation and confirmation workflow rather than bypassing it.

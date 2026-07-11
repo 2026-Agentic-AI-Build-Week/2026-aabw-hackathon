@@ -52,6 +52,7 @@ export interface ThemeTokens {
     lg: number;
     circle: number;
   };
+  opacity: { disabled: number; };
   layout: {
     headerHeight: number;
     headerActionSize: number;
@@ -190,6 +191,7 @@ export const theme: ThemeTokens = {
     lg: 12,
     circle: 9999,
   },
+  opacity: { disabled: 0.45 },
   layout: {
     headerHeight: 56,
     headerActionSize: 36,

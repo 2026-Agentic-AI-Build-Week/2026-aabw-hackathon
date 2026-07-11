@@ -19,11 +19,11 @@ root.
   `pages/MessengerChatList.tsx`.
 - **Conversation:** `pages/ChatConversationDetail.tsx` uses an inverted
   `FlatList`, `KeyboardAvoidingView`, responsive Android system-bar padding, and
-  local optimistic messages.
+  optimistic messages, and the authenticated Socket.IO chat hook.
 - **Navigation:** `pages/MessengerChatModule.tsx` uses local state for the
   list/detail transition. React Navigation is not installed yet.
-- **Data:** `chatData.ts` contains display DTOs and mock conversation history.
-  Components do not call the backend.
+- **Data:** `chatData.ts` provides the pinned Bot list fixture. Realtime DTOs
+  live in `models/chat.ts`; `hooks/useRealtimeChat.ts` owns socket state.
 
 ## Directory map
 
@@ -71,6 +71,6 @@ development machine. Use `--tunnel` when LAN discovery is unavailable.
 
 1. Restore a stored session during app bootstrap and refresh expired access tokens.
 2. Add Authorization interceptors to authenticated API clients.
-3. Replace `chatData.ts` fixtures with API hooks and real conversation IDs.
+3. Replace the remaining list fixtures with a conversation-list API.
 4. Swap local navigation state for React Navigation routes and route params.
 5. Implement attach-image, microphone, call, and video button actions.

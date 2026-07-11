@@ -40,4 +40,25 @@ describe("auth HTTP API", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toMatchObject({ error: { code: "VALIDATION_ERROR" } });
   });
+
+  it("returns a 500 envelope for unexpected exceptions", async () => {
+    class FailingAuthRepository extends InMemoryAuthRepository {
+      override async findUserByEmail(): Promise<never> {
+        throw new Error("database unavailable");
+      }
+    }
+    const repository = new FailingAuthRepository();
+    const dependencies = createAuthTestDependencies(repository);
+    repository.addUser(createDemoUser(dependencies, "demo@kfc.local", "DemoPassword123!"));
+    const application = await createAuthApplication(dependencies).listen(0);
+    servers.push(application);
+
+    const response = await application.request("/api/auth/login", {
+      method: "POST",
+      body: { email: "demo@kfc.local", password: "DemoPassword123!", device_id: "simulator" },
+    });
+
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ error: { code: "INTERNAL_ERROR" } });
+  });
 });

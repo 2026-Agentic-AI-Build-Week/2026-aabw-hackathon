@@ -5,21 +5,31 @@ import type { AuthServiceDependencies } from "../auth/auth-service.js";
 import { MenuItemService } from "../menu-items/menu-item-service.js";
 import { OrderInputError, parseQuoteInput } from "../orders/order-input.js";
 import { OrderError, OrderService } from "../orders/order-service.js";
+import { attachChatSocketServer } from "../realtime/socket-server.js";
+import type { ChatHandler } from "../realtime/chat-handler.js";
 
 type RequestOptions = { method?: string; body?: unknown; headers?: Record<string, string> };
 type Application = { listen(port: number, host?: string): Promise<{ close(): Promise<void>; request(path: string, options?: RequestOptions): Promise<Response> }> };
+type ApplicationOptions = { chatHandler?: ChatHandler };
 
-export function createAuthApplication(dependencies: AuthServiceDependencies, prisma?: PrismaClient): Application {
+export function createAuthApplication(dependencies: AuthServiceDependencies, prisma?: PrismaClient, options: ApplicationOptions = {}): Application {
   const auth = new AuthService(dependencies);
   const orders = prisma ? new OrderService(prisma) : undefined;
   const menuItems = prisma ? new MenuItemService(prisma) : undefined;
   return {
-    async listen(port) {
+    async listen(port, host = "127.0.0.1") {
       const server = createServer((request, response) => void handle(request, response, auth, orders, menuItems));
-      await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
+      const io = options.chatHandler ? attachChatSocketServer(server, auth, options.chatHandler) : undefined;
+      await new Promise<void>((resolve, reject) => {
+        server.once("error", reject);
+        server.listen(port, host, () => {
+          server.off("error", reject);
+          resolve();
+        });
+      });
       const address = server.address();
       if (!address || typeof address === "string") throw new Error("Server did not bind to a TCP port.");
-      return { close: () => close(server), request: (path, options = {}) => fetch(`http://127.0.0.1:${address.port}${path}`, { method: options.method ?? "GET", headers: { ...(options.body === undefined ? {} : { "content-type": "application/json" }), ...options.headers }, body: options.body === undefined ? undefined : JSON.stringify(options.body) }) };
+      return { close: async () => { await io?.close(); await close(server); }, request: (path, options = {}) => fetch(`http://127.0.0.1:${address.port}${path}`, { method: options.method ?? "GET", headers: { ...(options.body === undefined ? {} : { "content-type": "application/json" }), ...options.headers }, body: options.body === undefined ? undefined : JSON.stringify(options.body) }) };
     },
   };
 }
@@ -56,7 +66,7 @@ async function handle(request: IncomingMessage, response: ServerResponse, auth: 
     if (error instanceof OrderError) return send(response, error.statusCode, { error: { code: error.code, message: error.message } });
     if (error instanceof AuthError) return send(response, error.statusCode, { error: { code: error.code, message: error.message } });
     if (error instanceof ValidationError || error instanceof OrderInputError) return send(response, 400, { error: { code: "VALIDATION_ERROR", message: error.message } });
-    return send(response, 401, { error: { code: "UNAUTHORIZED", message: "Authentication failed." } });
+    return send(response, 500, { error: { code: "INTERNAL_ERROR", message: "An unexpected server error occurred." } });
   }
 }
 

@@ -13,7 +13,7 @@ export default function App() {
   return (
     <View style={styles.container}>
       <StatusBar backgroundColor={theme.colors.surface} style="dark" />
-      {session ? <MessengerChatModule /> : <LoginScreen onLoginSuccess={setSession} />}
+      {session ? <MessengerChatModule accessToken={session.accessToken} /> : <LoginScreen onLoginSuccess={setSession} />}
     </View>
   );
 }

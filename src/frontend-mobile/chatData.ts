@@ -8,69 +8,22 @@ export interface ChatMessage {
   isOnline: boolean;
 }
 
-export type MessageSender = 'user' | 'bot';
-export type MessageStatus = 'sent' | 'delivered' | 'seen';
-
-export interface MessageDetail {
-  id: string;
-  text: string;
-  sender: MessageSender;
-  timestamp: string;
-  status: MessageStatus;
-}
+export const KFC_ORDERING_BOT_ID = 'kfc-ordering-bot';
 
 export const kfcBotProfile = {
   avatarUrl: 'https://i.pravatar.cc/160?img=12',
-  name: 'KFC Ordering Assistant',
+  name: 'KFC Ordering Bot',
   status: 'Active now',
 } as const;
 
 // Chronological order allows API results to replace this fixture directly.
-export const conversationMessages: MessageDetail[] = [
-  {
-    id: 'message-1',
-    text: 'Hi! Welcome to KFC. What would you like to order today?',
-    sender: 'bot',
-    timestamp: '4:20 PM',
-    status: 'seen',
-  },
-  {
-    id: 'message-2',
-    text: 'I would like a Zinger Burger meal, please.',
-    sender: 'user',
-    timestamp: '4:21 PM',
-    status: 'seen',
-  },
-  {
-    id: 'message-3',
-    text: 'Great choice. Would you like to upgrade your drink to a large Pepsi for $0.50?',
-    sender: 'bot',
-    timestamp: '4:21 PM',
-    status: 'seen',
-  },
-  {
-    id: 'message-4',
-    text: 'Yes, please add the large Pepsi.',
-    sender: 'user',
-    timestamp: '4:22 PM',
-    status: 'delivered',
-  },
-  {
-    id: 'message-5',
-    text: 'Done. Your Zinger Burger meal with a large Pepsi is $7.50. Shall I add it to your cart?',
-    sender: 'bot',
-    timestamp: '4:22 PM',
-    status: 'delivered',
-  },
-];
-
 export const chatData: ChatMessage[] = [
   {
-    id: '1',
-    userName: 'Nguyễn Anh Trí',
+    id: KFC_ORDERING_BOT_ID,
+    userName: 'KFC Ordering Bot',
     avatarUrl: 'https://i.pravatar.cc/160?img=12',
-    lastMessage: 'Đơn Gà Rán của bạn đã sẵn sàng để xác nhận.',
-    time: '17:42',
+    lastMessage: 'Order KFC in realtime.',
+    time: 'Now',
     isUnread: true,
     isOnline: true,
   },

@@ -1,8 +1,20 @@
 # KFC Conversational Ordering
 
 Full-stack hackathon workspace for a KFC conversational-ordering MVP. The
-repository contains a PostgreSQL/Prisma authentication backend and an Expo React
-Native mobile app with Messenger-inspired login and chat flows.
+repository contains a PostgreSQL/Prisma backend for authentication, menu lookup,
+order quotes, stock-aware order creation, and order management, plus an Expo
+React Native mobile app with Messenger-inspired login and chat flows.
+
+## Current Scope
+
+| Area | Current implementation |
+| --- | --- |
+| Authentication | Email/password login, token refresh, logout, profile lookup, and Expo SecureStore session persistence. |
+| Menu | Authenticated lookup of candidate menu item IDs, including unavailable and missing item classification. |
+| Orders | Quote creation, idempotent order creation, delivery updates, cancellation, pagination, and order-status filtering. |
+| Inventory | Available stock is seeded and checked before order creation; stock is decremented atomically. |
+| Mobile | Expo login flow, searchable Messenger-style chat list, and authenticated realtime KFC Bot conversation. |
+| Realtime chat | Socket.IO text chat persists a per-user session and uses OpenAI menu assistance when configured; a deterministic demo fallback is used without an AI key in development. |
 
 ## Prerequisites
 
@@ -33,19 +45,28 @@ npm --prefix src/backend run db:seed
 The seed is idempotent. It imports the catalog and demo business data, then
 creates active and blocked test users.
 
-### 3. Run the authentication API
+### 3. Run the backend API
 
 ```bash
 npm --prefix src/backend run dev
 ```
 
 The development API listens on port `3000`. `HOST=0.0.0.0` in the backend env
-allows Android/iOS devices on the local network to reach it.
+allows Android/iOS devices on the local network to reach it. If port `3000` is
+already occupied, stop the process using it or choose another `PORT` and update
+the mobile API base URL to match.
 
 - `POST /api/auth/login`
 - `POST /api/auth/refresh`
 - `POST /api/auth/logout`
 - `GET /api/auth/me`
+- `GET /api/menu-items?ids=<uuid>,<uuid>`
+- `POST /api/order-quotes`
+- `POST /api/orders`
+- `GET /api/orders`
+- `GET /api/orders/:id`
+- `PATCH /api/orders/:id/delivery`
+- `DELETE /api/orders/:id`
 
 ### 4. Configure the Expo app
 
@@ -60,6 +81,7 @@ target you use:
 ```dotenv
 # Android Emulator
 EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000
+EXPO_PUBLIC_SOCKET_URL=http://10.0.2.2:3000
 
 # iOS Simulator
 # EXPO_PUBLIC_API_BASE_URL=http://localhost:3000
@@ -67,6 +89,27 @@ EXPO_PUBLIC_API_BASE_URL=http://10.0.2.2:3000
 
 For a physical device, set the mobile URL to the development machine's LAN IP,
 for example `http://192.168.1.10:3000`, and keep both devices on the same Wi-Fi.
+Use the same value for both variables. `AI_API_KEY` is optional for the hackathon
+demo; leave it blank to use the deterministic local KFC assistant.
+
+Choose the AI provider only in `src/backend/.env`:
+
+```dotenv
+# Direct OpenAI
+AI_PROVIDER=openai
+AI_API_KEY=sk-...
+AI_MODEL_NAME=gpt-4.1-mini
+AI_MAX_OUTPUT_TOKENS=1024
+
+# Or OpenRouter
+# AI_PROVIDER=openrouter
+# AI_API_KEY=sk-or-v1-...
+# AI_MODEL_NAME=google/gemini-2.5-flash
+# AI_MAX_OUTPUT_TOKENS=1024
+```
+
+Restart the backend after changing providers or models. Never add the AI key to
+an `EXPO_PUBLIC_*` variable because those values are bundled into the mobile app.
 
 ### 5. Run the mobile app
 
@@ -94,12 +137,15 @@ unavailable-account error path.
 ## Verification
 
 ```bash
-# Backend type checks, Prisma schema validation, and tests
+# Backend type checks and Prisma schema validation
 npm --prefix src/backend run lint
+
+# Backend unit and HTTP API tests
 npm --prefix src/backend run test
 
-# Expo TypeScript checks
+# Expo TypeScript and Android bundle checks
 npm --prefix src/frontend-mobile run typecheck
+npm --prefix src/frontend-mobile exec expo export -- --platform android --output-dir /tmp/kfc-mobile-export
 ```
 
 ## Useful Commands
@@ -108,7 +154,7 @@ npm --prefix src/frontend-mobile run typecheck
 | --- | --- | --- |
 | Database | `docker compose --env-file src/backend/.env -f src/backend/docker-compose.yml up -d` | Start PostgreSQL 16. |
 | Database | `docker compose --env-file src/backend/.env -f src/backend/docker-compose.yml down` | Stop PostgreSQL and retain its volume. |
-| Backend | `npm --prefix src/backend run dev` | Run the auth API with file watching. |
+| Backend | `npm --prefix src/backend run dev` | Run the API with file watching. |
 | Backend | `npm --prefix src/backend run db:migrate` | Apply committed Prisma migrations. |
 | Backend | `npm --prefix src/backend run db:migrate:dev` | Create and apply a development migration. |
 | Backend | `npm --prefix src/backend run db:seed` | Seed catalog and demo data. |
@@ -127,8 +173,10 @@ src/
 ├── backend/
 │   ├── prisma/                       # Schema, migrations, and seed pipeline
 │   ├── src/auth/                     # Password hashing, sessions, JWT services
-│   ├── src/http/app.ts               # Auth HTTP routes and error envelope
-│   └── tests/auth/                   # Auth API and service tests
+│   ├── src/http/app.ts               # HTTP router and common error envelope
+│   ├── src/menu-items/               # Menu candidate-ID lookup service
+│   ├── src/orders/                   # Quote, order, stock, and delivery logic
+│   └── tests/                        # Auth, menu, and order automated tests
 └── frontend-mobile/
     ├── App.tsx                       # Expo root and authenticated app gate
     ├── LoginScreen.tsx               # Email/password API login screen
@@ -156,3 +204,15 @@ On success the API returns `access_token`, `refresh_token`, `expires_in`, and a
 public `user` object. The app maps this response to its `AuthSession` type and
 stores tokens in Expo SecureStore. Do not commit `.env` files, secrets, generated
 Expo state, native build output, or dependency directories.
+
+## Environment Notes
+
+- Keep `src/backend/.env` and `src/frontend-mobile/.env` local only. Start from
+  their respective `.env.example` files.
+- `AUTH_ACCESS_TOKEN_SECRET`, `AUTH_REFRESH_TOKEN_SECRET`, and
+  `AUTH_TOKEN_PEPPER` must be unique development secrets. The pepper is an
+  additional server-side secret used while deriving password hashes; it must not
+  be sent to the mobile app.
+- Android emulators reach a local backend through `http://10.0.2.2:<port>`.
+  Physical devices require the development machine's LAN IP and the same Wi-Fi,
+  unless Expo tunnel mode is used for Metro access.

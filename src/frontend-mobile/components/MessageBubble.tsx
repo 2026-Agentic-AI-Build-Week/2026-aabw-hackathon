@@ -1,14 +1,15 @@
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import type { MessageDetail } from '../chatData';
+import type { ConversationMessage } from '../models/chat';
 import { theme } from '../theme';
 
 interface MessageBubbleProps {
   botAvatarUrl: string;
-  message: MessageDetail;
+  message: ConversationMessage;
+  onRetry: (clientMessageId: string) => void;
 }
 
-export function MessageBubble({ botAvatarUrl, message }: MessageBubbleProps) {
+export function MessageBubble({ botAvatarUrl, message, onRetry }: MessageBubbleProps) {
   const isUser = message.sender === 'user';
 
   return (
@@ -19,17 +20,20 @@ export function MessageBubble({ botAvatarUrl, message }: MessageBubbleProps) {
           <Text style={[styles.messageText, isUser ? styles.userText : styles.botText]}>{message.text}</Text>
         </View>
         <Text style={[styles.meta, isUser ? styles.userMeta : styles.botMeta]}>{formatStatus(message)}</Text>
+        {message.status === 'failed' && message.clientMessageId && <Pressable onPress={() => onRetry(message.clientMessageId!)}><Text style={styles.retryText}>Tap to retry</Text></Pressable>}
       </View>
     </View>
   );
 }
 
-function formatStatus(message: MessageDetail) {
+function formatStatus(message: ConversationMessage) {
+  const parsed = new Date(message.timestamp);
+  const timestamp = Number.isNaN(parsed.getTime()) ? message.timestamp : parsed.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   if (message.sender === 'bot') {
-    return message.timestamp;
+    return timestamp;
   }
 
-  return `${message.timestamp} · ${message.status}`;
+  return `${timestamp} · ${message.status}`;
 }
 
 const styles = StyleSheet.create({
@@ -98,4 +102,5 @@ const styles = StyleSheet.create({
   userMeta: {
     color: theme.colors.textSecondary,
   },
+  retryText: { color: theme.colors.error, marginTop: theme.spacing.xs, ...theme.typography.messageStatus },
 });
