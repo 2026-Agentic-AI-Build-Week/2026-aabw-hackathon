@@ -58,6 +58,7 @@ async function seedCatalog() {
         imageUrl: item.image_url || null,
         productUrl: item.product_url || null,
         isAvailable: item.available,
+        stockQuantity: item.available ? 100 : 0,
       },
       create: {
         externalId: item.id,
