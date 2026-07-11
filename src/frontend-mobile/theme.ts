@@ -14,6 +14,15 @@ export interface ThemeTokens {
     statusOffline: string;
     border: string;
     metaAi: string;
+    chatBotBubble: string;
+    chatUserBubble: string;
+    chatUserText: string;
+    chatCanvas: string;
+    sendButton: string;
+    loginBrand: string;
+    loginInputBorder: string;
+    loginPlaceholder: string;
+    loginButtonDisabled: string;
   };
   typography: {
     title: TextStyle;
@@ -22,6 +31,11 @@ export interface ThemeTokens {
     itemMessageUnread: TextStyle;
     meta: TextStyle;
     searchInput: TextStyle;
+    messageText: TextStyle;
+    conversationName: TextStyle;
+    messageStatus: TextStyle;
+    loginInput: TextStyle;
+    loginButton: TextStyle;
   };
   spacing: {
     xs: number;
@@ -41,11 +55,21 @@ export interface ThemeTokens {
     headerActionSize: number;
     searchBarHeight: number;
     avatarSize: number;
+    conversationAvatarSize: number;
+    messageAvatarSize: number;
     statusDotSize: number;
     unreadBadgeSize: number;
     iconSmall: number;
     iconMedium: number;
     iconLarge: number;
+    conversationHeaderHeight: number;
+    inputBarButtonSize: number;
+    inputBarHeight: number;
+    messageBubbleMaxWidth: number;
+    loginLogoSize: number;
+    loginLogoIconSize: number;
+    loginInputHeight: number;
+    loginContentOffset: number;
     listItemVerticalPadding: number;
     bottomPadding: number;
   };
@@ -67,6 +91,15 @@ export const theme: ThemeTokens = {
     statusOffline: '#C0C6D6',
     border: '#C0C6D6',
     metaAi: '#7E22CE',
+    chatBotBubble: '#F0F2F5',
+    chatUserBubble: '#0084FF',
+    chatUserText: '#FFFFFF',
+    chatCanvas: '#FFFFFF',
+    sendButton: '#0084FF',
+    loginBrand: '#0064E0',
+    loginInputBorder: '#D1D5DB',
+    loginPlaceholder: '#6B7280',
+    loginButtonDisabled: '#93C5FD',
   },
   typography: {
     title: {
@@ -106,6 +139,37 @@ export const theme: ThemeTokens = {
       lineHeight: 18,
       fontWeight: '400',
     },
+    messageText: {
+      fontFamily,
+      fontSize: 15,
+      lineHeight: 20,
+      fontWeight: '400',
+    },
+    conversationName: {
+      fontFamily,
+      fontSize: 17,
+      lineHeight: 22,
+      fontWeight: '600',
+      letterSpacing: -0.17,
+    },
+    messageStatus: {
+      fontFamily,
+      fontSize: 12,
+      lineHeight: 16,
+      fontWeight: '500',
+    },
+    loginInput: {
+      fontFamily,
+      fontSize: 15,
+      lineHeight: 20,
+      fontWeight: '400',
+    },
+    loginButton: {
+      fontFamily,
+      fontSize: 15,
+      lineHeight: 20,
+      fontWeight: '500',
+    },
   },
   spacing: {
     xs: 4,
@@ -125,11 +189,21 @@ export const theme: ThemeTokens = {
     headerActionSize: 36,
     searchBarHeight: 40,
     avatarSize: 56,
+    conversationAvatarSize: 40,
+    messageAvatarSize: 28,
     statusDotSize: 14,
     unreadBadgeSize: 10,
     iconSmall: 20,
     iconMedium: 24,
     iconLarge: 26,
+    conversationHeaderHeight: 64,
+    inputBarButtonSize: 36,
+    inputBarHeight: 36,
+    messageBubbleMaxWidth: 75,
+    loginLogoSize: 80,
+    loginLogoIconSize: 48,
+    loginInputHeight: 52,
+    loginContentOffset: 64,
     listItemVerticalPadding: 10,
     bottomPadding: 20,
   },

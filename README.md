@@ -27,6 +27,8 @@ and an order for operations metrics.
 
 ## Commands
 
+- `npm --prefix src/frontend-mobile install` — install Expo mobile dependencies.
+- `npm --prefix src/frontend-mobile start` — start the Expo development server.
 - `make -C src/backend db-up` — start PostgreSQL.
 - `make -C src/backend db-down` — stop services and retain the database volume.
 - `make -C src/backend db-migrate` — deploy committed Prisma migrations.
@@ -41,7 +43,7 @@ and an order for operations metrics.
 
 - `src/backend/` — self-contained backend package and database toolchain.
 - `src/frontend-mobile/` — React Native/Expo Messenger chat-list module.
-- `src/frontend-mobile/MessengerChatList.tsx` — module screen entry point.
+- `src/frontend-mobile/pages/MessengerChatModule.tsx` — mobile module entry point and list/detail navigation.
 - `src/frontend-mobile/theme.ts` — shared mobile design tokens.
 - `src/backend/prisma/schema.prisma` — relational schema and constraints.
 - `src/backend/prisma/seed.ts` — catalog and deterministic demo data.

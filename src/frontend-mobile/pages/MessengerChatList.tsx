@@ -1,11 +1,18 @@
 import { useMemo, useState } from 'react';
-import { FlatList, SafeAreaView, StyleSheet, View } from 'react-native';
+import {
+  FlatList,
+  Platform,
+  SafeAreaView,
+  StatusBar,
+  StyleSheet,
+  View,
+} from 'react-native';
 
-import { chatData, type ChatMessage } from './chatData';
-import { ChatListItem } from './components/ChatListItem';
-import { Header } from './components/Header';
-import { SearchBar } from './components/SearchBar';
-import { theme } from './theme';
+import { chatData, type ChatMessage } from '../chatData';
+import { ChatListItem } from '../components/ChatListItem';
+import { Header } from '../components/Header';
+import { SearchBar } from '../components/SearchBar';
+import { theme } from '../theme';
 
 interface MessengerChatListProps {
   onChatPress?: (chat: ChatMessage) => void;
@@ -13,6 +20,12 @@ interface MessengerChatListProps {
 
 export function MessengerChatList({ onChatPress }: MessengerChatListProps) {
   const [query, setQuery] = useState('');
+  const androidStatusBarInset = Platform.OS === 'android'
+    ? StatusBar.currentHeight ?? theme.spacing.xl
+    : undefined;
+  const androidBottomInset = Platform.OS === 'android'
+    ? theme.spacing.sm
+    : undefined;
 
   const filteredChats = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase('vi-VN');
@@ -27,7 +40,15 @@ export function MessengerChatList({ onChatPress }: MessengerChatListProps) {
   }, [query]);
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView
+      style={[
+        styles.safeArea,
+        {
+          paddingBottom: androidBottomInset,
+          paddingTop: androidStatusBarInset,
+        },
+      ]}
+    >
       <Header />
       <SearchBar onChangeText={setQuery} value={query} />
       <FlatList
