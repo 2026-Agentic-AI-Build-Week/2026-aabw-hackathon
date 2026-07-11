@@ -40,6 +40,9 @@ and an order for operations metrics.
 ## Layout
 
 - `src/backend/` — self-contained backend package and database toolchain.
+- `src/frontend-mobile/` — React Native/Expo Messenger chat-list module.
+- `src/frontend-mobile/MessengerChatList.tsx` — module screen entry point.
+- `src/frontend-mobile/theme.ts` — shared mobile design tokens.
 - `src/backend/prisma/schema.prisma` — relational schema and constraints.
 - `src/backend/prisma/seed.ts` — catalog and deterministic demo data.
 - `src/backend/src/lib/normalization.ts` — canonical email and phone handling.
