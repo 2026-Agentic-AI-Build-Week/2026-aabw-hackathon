@@ -11,6 +11,7 @@ import {
 
 import { kfcBotProfile } from '../chatData';
 import { ChatHeader } from '../components/ChatHeader';
+import { CheckoutCard } from '../components/CheckoutCard';
 import { ChatInputBar } from '../components/ChatInputBar';
 import { MessageBubble } from '../components/MessageBubble';
 import { useRealtimeChat } from '../hooks/useRealtimeChat';
@@ -24,7 +25,7 @@ interface ChatConversationDetailProps {
 
 export function ChatConversationDetail({ accessToken, onBackPress }: ChatConversationDetailProps) {
   const [draft, setDraft] = useState('');
-  const { connectionStatus, errorMessage, messages, retryMessage, sendMessage, typingLabel } = useRealtimeChat(accessToken);
+  const { checkout, connectionStatus, errorMessage, messages, retryMessage, sendMessage, typingLabel } = useRealtimeChat(accessToken);
   const systemInsets = getSystemInsets();
 
   const handleSend = () => {
@@ -55,6 +56,7 @@ export function ChatConversationDetail({ accessToken, onBackPress }: ChatConvers
           onBackPress={onBackPress}
           status={kfcBotProfile.status}
         />
+        {checkout && <CheckoutCard checkout={checkout} onConfirmationPhrasePress={setDraft} />}
         <FlatList
           contentContainerStyle={styles.listContent}
           data={messages}

@@ -64,5 +64,6 @@ credentials.json
 Thumbs.db
 .idea/
 .vscode/
+.worktrees/
 *.swp
 *.swo

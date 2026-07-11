@@ -14,7 +14,7 @@ React Native mobile app with Messenger-inspired login and chat flows.
 | Orders | Quote creation, idempotent order creation, delivery updates, cancellation, pagination, and order-status filtering. |
 | Inventory | Available stock is seeded and checked before order creation; stock is decremented atomically. |
 | Mobile | Expo login flow, searchable Messenger-style chat list, and authenticated realtime KFC Bot conversation. |
-| Realtime chat | Socket.IO text chat persists a per-user session and uses OpenAI menu assistance when configured; a deterministic demo fallback is used without an AI key in development. |
+| Realtime chat | Socket.IO text chat persists a per-user session, builds an order draft, collects delivery details, creates server-priced quotes, and creates an order only after an exact confirmation phrase. Qwen/OpenAI-compatible providers are optional; a deterministic demo fallback is available for development. |
 
 ## Prerequisites
 
@@ -95,21 +95,95 @@ demo; leave it blank to use the deterministic local KFC assistant.
 Choose the AI provider only in `src/backend/.env`:
 
 ```dotenv
-# Direct OpenAI
-AI_PROVIDER=openai
-AI_API_KEY=sk-...
-AI_MODEL_NAME=gpt-4.1-mini
+# Recommended DashScope / Qwen configuration for the intent-search agent
+AI_PROVIDER=dashscope
+DASHSCOPE_API_KEY=your-dashscope-api-key
+AI_MODEL_NAME=qwen3.7-plus
 AI_MAX_OUTPUT_TOKENS=1024
 
-# Or OpenRouter
-# AI_PROVIDER=openrouter
-# AI_API_KEY=sk-or-v1-...
-# AI_MODEL_NAME=google/gemini-2.5-flash
-# AI_MAX_OUTPUT_TOKENS=1024
+# Direct OpenAI and OpenRouter remain supported through AI_API_KEY
+# AI_PROVIDER=openai
+# AI_API_KEY=sk-...
+# AI_MODEL_NAME=gpt-4.1-mini
 ```
 
 Restart the backend after changing providers or models. Never add the AI key to
 an `EXPO_PUBLIC_*` variable because those values are bundled into the mobile app.
+
+### Intent-driven menu search
+
+The realtime agent extracts a structured menu intent before searching.
+PostgreSQL ranks only available, in-stock items using weighted full-text search
+over item name, slug, type, and description, expands matching categories, and
+falls back to trigram similarity for typos. Apply the committed migration before
+running the backend against a database:
+
+```bash
+npm --prefix src/backend run db:migrate
+npm --prefix src/backend run db:seed
+```
+
+### Conversational checkout lifecycle
+
+The realtime chat is the mobile checkout entry point. Pricing, stock checks,
+quote expiry, confirmation tokens, and order creation remain owned by the
+existing backend order service rather than being calculated by the AI model or
+mobile app.
+
+1. **Build the draft:** the customer searches the menu and adds or removes
+   items through natural-language chat. The backend persists the temporary
+   order draft against the authenticated chat session.
+2. **Collect delivery details:** before checkout, the bot collects email,
+   recipient name, phone number, address, and city. Ward and district are
+   optional when the backend accepts them.
+3. **Request a quote:** the customer asks to check out or get a quote. The
+   backend maps the draft to `OrderService.createQuote`, which calculates the
+   authoritative items, discounts, delivery fee, total, availability, and
+   expiry time.
+4. **Confirm explicitly:** the mobile app receives a safe quote DTO and displays
+   a generated phrase such as `CONFIRM 7A2F`. Tapping the phrase only copies it
+   into the normal chat input. The customer must send that exact phrase before
+   an order is created.
+5. **Create the order:** the backend matches the phrase to the pending quote and
+   calls `OrderService.createOrder` with the server-held confirmation token and
+   idempotency key. The mobile app then receives a safe created-order DTO.
+
+Sending `yes`, creating totals on the client, or calling the order REST endpoint
+directly from the chat UI does not authorize checkout. A changed cart, delivery
+address, or voucher invalidates the pending quote and requires a new quote.
+
+### Realtime Socket events
+
+| Direction | Event | Purpose |
+| --- | --- | --- |
+| Mobile → backend | `session_join` | Join or restore the authenticated chat session and persisted history. |
+| Mobile → backend | `user_chat` | Send one natural-language message with protocol, session, and client message IDs. |
+| Backend → mobile | `ai_typing` | Report processing state such as menu lookup, quote building, or order creation. |
+| Backend → mobile | `ai_response` | Deliver the persisted assistant message. |
+| Backend → mobile | `checkout_update` | Deliver either a safe `quote_ready` or `order_created` payload. |
+| Backend → mobile | `chat_error` | Return a typed, user-safe realtime error. |
+
+### Checkout security boundaries
+
+- `AI_API_KEY`, `DASHSCOPE_API_KEY`, authentication secrets, quote confirmation
+  tokens, and order idempotency keys are backend-only values.
+- Never place a provider key or server token in an `EXPO_PUBLIC_*` variable;
+  Expo embeds those variables in the client bundle.
+- The mobile app receives only safe checkout DTOs: item and total information,
+  quote expiry, the user-facing confirmation phrase, and the created order's
+  public status. It never receives the backend confirmation token.
+- The AI extracts intent and writes natural-language responses, but the REST
+  order service remains the source of truth for prices, stock, quote validity,
+  and order mutations.
+
+### Development fallback
+
+Without a configured AI provider key, the backend uses a deterministic menu
+intent extractor and responder. It supports the same backend draft and checkout
+orchestrator, but its natural-language extraction is intentionally narrower
+than Qwen. For a reliable fallback demo, provide explicit item requests and
+label delivery details clearly, including recipient name, email, phone, address,
+and city, before asking for `checkout` or `get quote`.
 
 ### 5. Run the mobile app
 
@@ -147,6 +221,26 @@ npm --prefix src/backend run test
 npm --prefix src/frontend-mobile run typecheck
 npm --prefix src/frontend-mobile exec expo export -- --platform android --output-dir /tmp/kfc-mobile-export
 ```
+
+Manual chat-checkout acceptance:
+
+1. Sign in and open the pinned KFC Ordering Bot conversation.
+2. Add an available item and quantity.
+3. Provide the required delivery details.
+4. Ask for a quote and verify the quote card displays server totals and expiry.
+5. Send the displayed `CONFIRM XXXX` phrase exactly.
+6. Verify an `order_created` card appears and the order is available through
+   the authenticated order API.
+
+## Future Voice Ordering
+
+The checkout workflow is transport-neutral by design. A future Agora voice
+channel should convert speech to authenticated conversation turns and reuse the
+same session draft, intent handling, quote orchestrator, exact-confirmation
+policy, and `OrderService`. Voice must not hold provider secrets, calculate
+totals, or create orders independently. This keeps text and voice ordering
+consistent while allowing voice-specific streaming, interruption, and speech
+rendering to be added later.
 
 ## Useful Commands
 

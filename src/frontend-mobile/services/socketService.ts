@@ -4,7 +4,14 @@ import type { ClientToServerEvents, ServerToClientEvents } from '../models/chat'
 export type ChatSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 export function createChatSocket(accessToken: string): ChatSocket {
-  return io(getSocketUrl(), { auth: { accessToken }, autoConnect: false, reconnection: true, transports: ['websocket'] });
+  const socketOptions: NonNullable<Parameters<typeof io>[1]> = {
+    auth: { accessToken },
+    autoConnect: false,
+    reconnection: true,
+    transports: ['websocket'],
+  };
+
+  return io(getSocketUrl(), socketOptions);
 }
 
 function getSocketUrl(): string {

@@ -1,8 +1,9 @@
 # Frontend Mobile — Messenger Chat Module
 
-Module React Native/Expo tái hiện màn hình danh sách và hội thoại chi tiết từ bản
-export Stitch AI. Module không phụ thuộc vào backend: dữ liệu đang là mock data để
-đội có thể thay thế bằng API client khi các endpoint sẵn sàng.
+Module React Native/Expo cung cấp đăng nhập, danh sách hội thoại và chat realtime
+với KFC Ordering Bot. Chat kết nối Socket.IO với backend để tìm món, duy trì draft,
+nhận quote an toàn và xác nhận tạo đơn; mobile không tự tính giá hoặc gọi trực tiếp
+REST API tạo đơn.
 
 ## Folder structure
 
@@ -13,6 +14,7 @@ src/frontend-mobile/
 │   ├── ChatHeader.tsx        # Header hội thoại: back, shop, call và video
 │   ├── ChatInputBar.tsx      # Nhập tin, image, mic, send/like theo draft
 │   ├── ChatListItem.tsx      # Một hàng chat, trạng thái đọc/chưa đọc
+│   ├── CheckoutCard.tsx      # Quote/order an toàn và confirmation phrase
 │   ├── Header.tsx            # Tiêu đề và nút camera/soạn tin
 │   ├── MessageBubble.tsx     # Bong bóng bot/user, avatar và message status
 │   └── SearchBar.tsx         # Input tìm kiếm với các icon Expo
@@ -25,7 +27,10 @@ src/frontend-mobile/
 │   ├── MessengerChatModule.tsx    # Điều hướng nội bộ list và conversation
 │   └── MessengerLogin.tsx         # Login UI theo Messenger, submit mock vào chat
 ├── chatData.ts               # DTO chat list/detail và mock data
+├── hooks/useRealtimeChat.ts  # Socket lifecycle, optimistic state và checkout
+├── models/chat.ts            # Typed Socket events và safe checkout DTOs
 ├── services/authService.ts    # Axios login + SecureStore session handling
+├── services/socketService.ts  # Authenticated Socket.IO client factory
 ├── .env.example               # API base URL configuration template
 ├── theme.ts                  # Design tokens dùng xuyên suốt module
 ├── app.json                  # Expo application metadata
@@ -114,6 +119,86 @@ export default function App() {
 ```
 
 The KFC Ordering Bot is always pinned to the first list item. The MVP only
-supports realtime menu-assistant text chat; quote/order mutations and voice
-calling are deliberately deferred. Future voice must reuse the same backend
-conversation and confirmation workflow rather than bypassing it.
+supports realtime text ordering. Quote and order mutations are executed by the
+backend order service and surfaced through typed Socket events.
+
+## Chat checkout lifecycle
+
+1. The customer sends a menu request through the normal chat input.
+2. The backend extracts intent, searches available menu data, and persists item
+   selections in the authenticated session draft.
+3. The customer supplies email, recipient name, phone, address, and city.
+4. When the customer asks for checkout, the backend creates an authoritative
+   quote through the existing order service.
+5. `checkout_update` returns a `quote_ready` safe DTO. `CheckoutCard.tsx` renders
+   line items, totals, expiry, and a phrase such as `CONFIRM 7A2F`.
+6. Tapping the phrase only pre-fills `ChatInputBar.tsx`; it does not create the
+   order. The customer must send the exact phrase as a regular chat message.
+7. The backend validates the pending quote and phrase, creates the order
+   idempotently, and emits an `order_created` safe DTO for the same card area.
+
+Changing items, delivery details, or a voucher invalidates an existing pending
+quote. Generic replies such as `yes` are not checkout authorization.
+
+## Socket events
+
+| Direction | Event | Mobile responsibility |
+| --- | --- | --- |
+| Client → server | `session_join` | Restore the authenticated session and history. |
+| Client → server | `user_chat` | Send text with stable session and client message IDs. |
+| Server → client | `ai_typing` | Display the current processing stage without blocking input. |
+| Server → client | `ai_response` | Reconcile and append the persisted bot response. |
+| Server → client | `checkout_update` | Store and render `quote_ready` or `order_created`. |
+| Server → client | `chat_error` | Show a safe retryable or terminal error. |
+
+`useRealtimeChat.ts` owns subscriptions, optimistic messages, acknowledgements,
+typing state, checkout state, retries, and cleanup. UI components consume this
+typed state and do not own networking logic.
+
+## Security boundaries
+
+- The mobile bundle contains only public backend URLs. Never add AI provider
+  keys, authentication signing secrets, confirmation tokens, or idempotency keys
+  to `EXPO_PUBLIC_*` variables.
+- Access and refresh tokens are stored through Expo SecureStore. The access
+  token authenticates the Socket.IO handshake.
+- Mobile checkout models contain only safe item totals, quote expiry, the
+  user-facing confirmation phrase, and public order details.
+- The server keeps the real quote confirmation token and idempotency key. The AI
+  and mobile UI cannot invent prices, bypass stock checks, or create an order
+  without the backend confirmation workflow.
+
+## Demo fallback
+
+If no AI provider key is configured, the backend uses a deterministic fallback
+while preserving the same session draft and checkout orchestrator. Its language
+understanding is intentionally limited, so use explicit item names and clearly
+label recipient name, email, phone, address, and city before sending `checkout`
+or `get quote`. Configure Qwen for the intended natural-language demo quality.
+
+## Verification
+
+```bash
+# Mobile strict TypeScript validation
+npm --prefix src/frontend-mobile run typecheck
+
+# Backend contracts, checkout orchestration, and HTTP behavior
+npm --prefix src/backend run lint
+npm --prefix src/backend run test
+
+# Optional Android production-bundle smoke check
+npm --prefix src/frontend-mobile exec expo export -- --platform android --output-dir /tmp/kfc-mobile-export
+```
+
+Manual acceptance: sign in, add an available item, provide all required delivery
+details, request a quote, verify the quote card, send the displayed exact phrase,
+and confirm that the card changes to the created-order state.
+
+## Future voice and Agora
+
+Voice ordering should be another transport over the existing backend
+conversation workflow. A future Agora integration can stream audio and speech
+turns, but it must reuse the authenticated session draft, menu intent handling,
+checkout orchestrator, exact-confirmation policy, and order service. Keeping
+these responsibilities server-side prevents text and voice flows from producing
+different prices, stock decisions, or authorization behavior.

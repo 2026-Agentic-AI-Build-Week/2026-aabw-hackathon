@@ -4,6 +4,19 @@ import type { AuthService } from "../auth/auth-service.js";
 import { ChatHandler, ChatInputError, type ChatEmitter } from "./chat-handler.js";
 import { CHAT_PROTOCOL_VERSION, type ClientToServerEvents, type ServerToClientEvents, type SocketData } from "./chat-events.js";
 
+type SocketChatEmitterTarget = {
+  emit<Event extends keyof ServerToClientEvents>(event: Event, payload: Parameters<ServerToClientEvents[Event]>[0]): unknown;
+};
+
+export function createSocketChatEmitter(socket: SocketChatEmitterTarget): ChatEmitter {
+  return {
+    typing: (payload) => { socket.emit("ai_typing", payload); },
+    response: (payload) => { socket.emit("ai_response", payload); },
+    checkout: (payload) => { socket.emit("checkout_update", payload); },
+    error: (payload) => { socket.emit("chat_error", payload); },
+  };
+}
+
 export function attachChatSocketServer(httpServer: HttpServer, auth: AuthService, handler: ChatHandler): Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData> {
   const io = new Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>(httpServer, { cors: { origin: "*" } });
   io.use((socket, next) => {
@@ -19,11 +32,7 @@ export function attachChatSocketServer(httpServer: HttpServer, auth: AuthService
     }
   });
   io.on("connection", (socket) => {
-    const emitter: ChatEmitter = {
-      typing: (payload) => socket.emit("ai_typing", payload),
-      response: (payload) => socket.emit("ai_response", payload),
-      error: (payload) => socket.emit("chat_error", payload),
-    };
+    const emitter = createSocketChatEmitter(socket);
     socket.on("session_join", (payload, acknowledge) => void (async () => {
       try {
         if (payload.protocol_version !== CHAT_PROTOCOL_VERSION) throw new ChatInputError("UNSUPPORTED_PROTOCOL", "The chat protocol version is unsupported.");
@@ -36,9 +45,10 @@ export function attachChatSocketServer(httpServer: HttpServer, auth: AuthService
     socket.on("user_chat", (payload, acknowledge) => void (async () => {
       try {
         if (payload.protocol_version !== CHAT_PROTOCOL_VERSION) throw new ChatInputError("UNSUPPORTED_PROTOCOL", "The chat protocol version is unsupported.");
-        const accepted = await handler.accept({ userId: socket.data.userId, sessionId: payload.session_id, text: payload.text, clientMessageId: payload.client_message_id });
+        const turn = await handler.acceptTurn({ userId: socket.data.userId, sessionId: payload.session_id, text: payload.text, clientMessageId: payload.client_message_id });
+        const accepted = turn.accepted;
         acknowledge({ ok: true, session_id: accepted.sessionId, message_id: accepted.messageId, client_message_id: accepted.clientMessageId, accepted_at: accepted.acceptedAt });
-        void handler.respond({ userId: socket.data.userId, sessionId: accepted.sessionId, text: payload.text }, emitter).catch((error) => {
+        void handler.respond({ userId: socket.data.userId, sessionId: accepted.sessionId, text: payload.text, history: turn.history }, emitter).catch((error) => {
           console.error("Realtime AI response failed", error);
           emitter.error({ session_id: accepted.sessionId, client_message_id: accepted.clientMessageId, error: toErrorDto(error) });
         });
