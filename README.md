@@ -106,6 +106,10 @@ AI_MAX_OUTPUT_TOKENS=1024
 # AI_API_KEY=sk-or-v1-...
 # AI_MODEL_NAME=google/gemini-2.5-flash
 # AI_MAX_OUTPUT_TOKENS=1024
+
+# Recommended Qwen configuration for the intent/search agent
+# AI_PROVIDER=openrouter
+# AI_MODEL_NAME=qwen/qwen3-30b-a3b-instruct-2507
 ```
 
 Restart the backend after changing providers or models. Never add the AI key to
