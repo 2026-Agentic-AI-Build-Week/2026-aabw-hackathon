@@ -1,55 +1,39 @@
-# Pipeline MVP Conversational Ordering in 24 Hours
+# Pipeline MVP Conversational Ordering Mobile-first trong 24 giờ
 
 ## 1. Mục tiêu và kiến trúc
 
-Build an English-first MVP that lets customers order through the React Native
-mobile app, with Messenger as an optional secondary channel:
+Xây dựng Mobile App tiếng Việt cho phép khách hàng:
 
-- Tìm món, hỏi giá, tùy chọn món.
+- Tìm món, hỏi giá và tùy chọn món bằng text hoặc voice note.
 - Thêm, sửa, xóa và xem giỏ hàng.
-- Đăng nhập bằng số điện thoại và OTP giả lập.
-- Tra cứu điểm loyalty.
-- Kiểm tra và áp dụng voucher.
+- Đăng nhập bằng số điện thoại và OTP giả lập để nhận JWT.
+- Tra cứu điểm loyalty, kiểm tra và áp dụng voucher.
 - Xác nhận rồi tạo đơn trong mock OMS.
+- Xem, theo dõi và hủy đơn của chính mình.
 - Chuyển sang nhân viên khi bot không xử lý được.
-- Theo dõi đơn hàng, hội thoại, handoff và success metrics trên trang `/ops`.
 
 Luồng xử lý chuẩn:
 
 ```text
-React Native Mobile App / Messenger
+React Native Mobile App
         ↓
-Channel Adapter → Normalize + Deduplicate
+JWT-protected REST API
+(Auth / Orders / Chat)
         ↓
-Conversation State + Business State
+Application Services + Conversation State + Business State
         ↓
-OpenAI Responses API → Function Calls
+OpenAI Responses API → Strict Function Calls
         ↓
 Validated Business Tools
         ↓
-Mock Menu / Loyalty / Voucher / OMS
+Mock Catalog / Identity / Loyalty / Voucher / OMS / Handoff
         ↓
-Response Renderer → Mobile App / Messenger
-        ↓
-Metrics + Audit Log + Handoff Queue
+Structured Mobile Response + Audit Log
 ```
 
-Không để LLM tự tính giá, quyết định voucher, sửa điểm hay trực tiếp tạo dữ liệu. Model chỉ hiểu ý định và gọi tool; business service xác thực và thực thi.
+`POST /api/chat` chỉ hoạt động với access JWT. Mobile App tạo và lưu `session_id` theo thiết bị; backend liên kết session với user đã xác thực.
 
-## 2. Công nghệ và thành phần
-
-- Backend: Python 3.12, FastAPI, Pydantic, SQLAlchemy/SQLModel và Alembic.
-- Customer chat app: React Native, TypeScript, and Expo under `src/frontend-mobile/`.
-- Operations dashboard: React, TypeScript, and Vite. It is internal tooling only,
-  not a customer chat channel.
-- Database: SQLite cho local/demo; hỗ trợ `DATABASE_URL` để đổi sang PostgreSQL khi có cloud.
-- AI: OpenAI Responses API với strict function schemas. Mặc định `gpt-5.6-luna`; fallback lần lượt `gpt-5.4-mini`, `gpt-4.1-mini` nếu tài khoản không có model mặc định. OpenAI hiện hỗ trợ function calling và conversation state qua Responses API. [Function calling](https://developers.openai.com/api/docs/guides/function-calling), [Conversation state](https://developers.openai.com/api/docs/guides/conversation-state), [Models](https://developers.openai.com/api/docs/models).
-- Deploy: one public HTTPS backend plus an Expo development build or Expo Go
-  client connected to the backend. If cloud deployment is not selected by hour
-  4, use an HTTPS tunnel and keep the React Native app as the guaranteed demo
-  channel.
-- Messenger chạy Development Mode với Page/tester của đội; không phụ thuộc App Review trong 24 giờ.
-- Không dùng Redis, vector database, RAG framework hoặc message broker trong MVP.
+Không để LLM tự tính giá, quyết định voucher, sửa điểm hay trực tiếp tạo dữ liệu. Model chỉ hiểu ý định và gọi tool; application service xác thực, kiểm tra quyền sở hữu và thực thi.
 
 Trạng thái nghiệp vụ:
 
@@ -59,19 +43,69 @@ BROWSING → CART_ACTIVE → AUTH_PENDING → READY_TO_QUOTE
                          ↘ HANDOFF
 ```
 
-Backend, không phải prompt, chịu trách nhiệm kiểm tra điều kiện chuyển trạng thái.
+Backend, không phải prompt hay REST controller, chịu trách nhiệm kiểm tra điều kiện chuyển trạng thái, quote còn hiệu lực, xác nhận và idempotency.
+
+## 2. Công nghệ và thành phần
+
+- Mobile: React Native, Expo, TypeScript, Expo Router, Zustand hoặc Context + reducer, Expo SecureStore cho token, AsyncStorage cho `session_id` và UI cache, Expo AV/Audio cho voice recording.
+- Backend: TypeScript, REST API validation, Prisma ORM và PostgreSQL.
+- Auth: OTP giả lập trong non-production, access JWT ngắn hạn và refresh token có thể thu hồi theo `device_id`.
+- AI: OpenAI Responses API với strict function schemas. Mặc định `gpt-5.6-luna`; fallback lần lượt `gpt-5.4-mini`, `gpt-4.1-mini` nếu tài khoản không có model mặc định. Voice note dùng OpenAI Whisper/Audio Transcriptions để chuyển thành text trước khi vào pipeline LLM.
+- Deploy: một backend HTTPS public và Mobile App chạy Expo Go, development build hoặc Android/iOS build.
+- Không dùng Redis, vector database, RAG framework hoặc message broker trong MVP.
+
+Mobile App render response động gồm message, quick replies, Cart Card và Order Status. App không tự tính giá, giảm giá hoặc trạng thái nghiệp vụ.
 
 ## 3. Interface và business tools
 
-### Channel API
+### Auth API
 
-- `GET /webhooks/meta`: xác minh webhook challenge.
-- `POST /webhooks/meta`: kiểm tra `X-Hub-Signature-256`, lưu event ID, trả HTTP 200 sớm rồi xử lý background.
-- `POST /api/chat`: the React Native app sends `{session_id, message}` and receives
-  `{message, cart, quick_replies, state}`.
-- `GET /health`: kiểm tra database, OpenAI và cấu hình channel.
-- `GET /api/ops/metrics`: số phiên, đơn, voucher, loyalty, lỗi và độ trễ.
-- `GET/PATCH /api/ops/handoffs`: xem và cập nhật hàng đợi chuyển nhân viên.
+- `POST /api/auth/otp/request` nhận `{phone}`; chuẩn hóa số điện thoại, tạo hoặc tái sử dụng OTP challenge và trả `{challenge_id, expires_at}`.
+- `POST /api/auth/otp/verify` nhận `{challenge_id, otp, device_id}`; xác minh OTP, tạo hoặc cập nhật user-device session và trả `{access_token, refresh_token, expires_in, user}`.
+- `POST /api/auth/refresh` nhận `{refresh_token, device_id}`; xoay refresh token và trả access/refresh token mới.
+- `POST /api/auth/logout` yêu cầu JWT; thu hồi refresh token của thiết bị hiện tại.
+- `GET /api/auth/me` yêu cầu JWT; trả hồ sơ người dùng và trạng thái loyalty cơ bản.
+- OTP chỉ xuất hiện trong response mock/development có cờ môi trường rõ ràng; không ghi OTP, refresh token hoặc số điện thoại đầy đủ vào log.
+
+### Order CRUD API
+
+- `POST /api/orders` yêu cầu JWT, nhận `{quote_id, confirmation_token, idempotency_key}`; chỉ tạo order khi quote thuộc user, còn hiệu lực và đã được xác nhận.
+- `GET /api/orders` yêu cầu JWT; trả danh sách order của user hiện tại, hỗ trợ phân trang và lọc trạng thái.
+- `GET /api/orders/{order_id}` yêu cầu JWT; chỉ trả order thuộc user hiện tại.
+- `PATCH /api/orders/{order_id}` yêu cầu JWT; Mobile App chỉ được cập nhật yêu cầu hủy đơn khi trạng thái cho phép, không được sửa món, giá, voucher hoặc delivery details sau khi order được tạo.
+- `DELETE /api/orders/{order_id}` không xóa dữ liệu vật lý; ánh xạ thành cùng use case hủy đơn để giữ audit trail và trạng thái `CANCELLED`.
+- `PATCH /api/admin/orders/{order_id}/status` dành cho admin/service role; chỉ cho phép chuyển trạng thái hợp lệ `CREATED → CONFIRMED → PREPARING → DELIVERING → COMPLETED`, hoặc `CANCELLED` khi policy cho phép.
+- Cả REST API và Chat tool dùng chung `OrderManagementPort`; không tạo hai implementation tạo đơn độc lập.
+
+### Chat API
+
+- `POST /api/chat` yêu cầu JWT, nhận:
+
+```json
+{
+  "session_id": "uuid",
+  "message": "Cho tôi 2 phần gà",
+  "voice_base64": "optional-base64-audio",
+  "idempotency_key": "uuid"
+}
+```
+
+- `message` hoặc `voice_base64` là bắt buộc. Nếu có voice, backend kiểm tra format và dung lượng, transcription sang text tiếng Việt, sau đó chạy cùng pipeline như text.
+- Response trả:
+
+```json
+{
+  "message": "Đã thêm 2 phần gà vào giỏ.",
+  "transcript": "Cho tôi 2 phần gà",
+  "cart": {},
+  "quick_replies": [],
+  "order_status": null,
+  "state": "CART_ACTIVE"
+}
+```
+
+- `session_id` phải thuộc user JWT hiện tại; retry cùng `idempotency_key` trả kết quả trước đó và không lặp side effect.
+- Giữ `GET /health`, `GET /api/ops/metrics`, `GET/PATCH /api/ops/handoffs`; `/health` kiểm tra database, OpenAI Chat, OpenAI transcription và JWT configuration.
 
 ### Tool schemas cho model
 
@@ -89,7 +123,7 @@ Backend, không phải prompt, chịu trách nhiệm kiểm tra điều kiện c
 - `create_order(confirmation_token, idempotency_key)`
 - `request_handoff(reason)`
 
-Tất cả tool trả về structured result gồm `success`, `code`, `message` và `data`. Tool không ném lỗi kỹ thuật trực tiếp vào hội thoại.
+Tất cả tool trả về structured result gồm `success`, `code`, `message` và `data`. Tool không ném lỗi kỹ thuật trực tiếp vào hội thoại. `request_otp` và `verify_otp` dùng chung Auth application service; token không được đưa vào transcript.
 
 ### Adapter nghiệp vụ
 
@@ -101,103 +135,59 @@ Tất cả tool trả về structured result gồm `success`, `code`, `message` 
 - `VoucherPort`
 - `OrderManagementPort`
 - `HandoffPort`
+- `SpeechToTextPort`
 
-Mock service cung cấp menu, modifier, hồ sơ khách hàng, voucher, điểm loyalty và đơn hàng bằng seed data. `create_order` bắt buộc có quote còn hiệu lực, xác nhận rõ ràng của người dùng và idempotency key; replay webhook không được tạo đơn thứ hai.
+Mock service cung cấp menu, modifier, hồ sơ khách hàng, voucher, điểm loyalty, transcription và đơn hàng bằng seed data. `create_order` bắt buộc có quote còn hiệu lực, xác nhận rõ ràng của người dùng và idempotency key; REST API và chat retry không được tạo đơn thứ hai.
 
-### Conversation rules
+### Quy tắc hội thoại
 
-- All customer-facing copy, prompts, quick replies, errors, demo scripts, and
-  test utterances are implemented in English.
-- Understand natural English menu requests, common abbreviations, misspellings,
-  and approximate item names.
+- Ưu tiên tiếng Việt tự nhiên; hiểu tên món gần đúng, viết tắt và không dấu.
 - Nếu có nhiều món phù hợp, bot hỏi lại thay vì tự chọn.
 - Mọi giá, giảm giá, điểm và tổng tiền phải xuất phát từ tool result.
 - Trước khi tạo đơn, bot hiển thị món, số lượng, giá, voucher, tổng tiền, người nhận và địa chỉ rồi yêu cầu xác nhận rõ ràng.
 - OTP demo chỉ hoạt động trong môi trường non-production; không ghi OTP hoặc số điện thoại đầy đủ vào log.
-- Handoff khi người dùng yêu cầu, hai lần liên tiếp không hiểu, tool nghiệp vụ lỗi hoặc yêu cầu nằm ngoài phạm vi.
+- Handoff khi người dùng yêu cầu nhân viên, model không chọn được tool phù hợp, lỗi ngoại vi lặp lại hoặc confidence thấp sau một câu hỏi làm rõ.
+- Khi voice transcription thất bại, bot yêu cầu gửi lại bằng text hoặc voice; không làm mất giỏ hàng hoặc conversation state.
 
 ## 4. Kế hoạch 24 giờ cho 6 người
 
-### Giờ 0–2: khóa contract và loại bỏ blocker
+### Giờ 0–2: khóa API contract và Mobile shell
 
-- Người 1: tech lead, khởi tạo monorepo, conventions, environment contract và integration branch.
-- Người 2: tạo OpenAI preflight, prompt, tool schemas và một tool-call smoke test.
-- Người 3: thiết kế state machine, business ports và seed data.
-- Người 4: tạo Meta app/Page/tester, token, webhook verification.
-- Người 5: dựng React Native/Expo chat app.
-- Người 6: tạo test matrix, demo script và bộ utterance tiếng Anh.
-- Checkpoint giờ 2: một request chat phải gọi được ít nhất một mock tool; mobile app phải gửi được message.
+- Người 1: khóa State Machine, tool schemas, response model Chat và shared application-service boundaries.
+- Người 2: khóa schema/contract Auth JWT + OTP và persistence cho user-device refresh session.
+- Người 3: khóa Order CRUD contract, ownership policy, idempotency và transition policy.
+- Người 4 — Mobile UI Developer: dựng Chat UI, message list, text composer, Quick Reply, Cart Card và Order Status trên simulator/thiết bị.
+- Người 5 — Mobile Core Developer: tạo Expo app shell, session/token storage abstraction, API client, login flow và smoke call.
+- Người 6: database/migration, API contract fixtures, structured logging và integration support.
+- **Checkpoint giờ 2:** Chat layout render được trên simulator/thiết bị thật; app hoàn thành smoke call đến backend; Auth, Order và Chat contracts được đội thống nhất.
 
 ### Giờ 2–8: xây các lát cắt độc lập
 
-- AI engineer: tool loop, conversation state, giới hạn tối đa 5 tool calls mỗi turn và fallback khi model lỗi.
-- Business engineer: menu, cart, pricing, voucher, loyalty, OTP và mock OMS.
-- Channel engineer: Messenger verification, signature, event normalization, deduplication và Send API.
-- Mobile engineer: React Native chat list/conversation screens, cart summary,
-  quick replies, and loading/error states.
-- Ops engineer: persistence, structured logging, `/ops`, metrics và handoff queue.
-- QA engineer: unit tests, contract tests và golden conversations.
-- Checkpoint giờ 8: mobile app hoàn tất luồng tìm món → thêm giỏ → báo giá.
+- Người 1: OpenAI orchestration, strict function calling, cart/quote conversation flow và tool error mapping.
+- Người 2: OTP request/verify, JWT refresh/logout/me, refresh-token revocation và mock identity/loyalty.
+- Người 3: create/list/detail/cancel Order API, admin status update, quote validation và idempotency.
+- Người 4: hoàn thiện native dynamic components, trạng thái loading/error/empty và màn hình order history/detail.
+- Người 5: state management, protected navigation, token refresh, chat retry, audio permission/recording/base64 upload.
+- Người 6: mock catalog/voucher/OMS, observability, API integration support và demo data.
+- **Checkpoint giờ 8:** Đăng nhập OTP, gửi text chat, thêm món, xem Cart Card và xem order list đã hoạt động trên Mobile.
 
 ### Giờ 8–14: tích hợp end-to-end
 
-- Hoàn thiện OTP, loyalty, voucher, delivery details, confirmation token và tạo đơn.
-- Nối Messenger vào cùng application service mà mobile app đang dùng.
-- Thêm handoff summary gồm lý do, trạng thái giỏ hàng và transcript đã che PII.
-- Deploy public HTTPS hoặc kích hoạt tunnel.
-- Checkpoint giờ 14: mobile app phải tạo được mã đơn; Messenger phải nhận và
-  phản hồi ít nhất một hội thoại nếu Meta setup thành công.
+- Nối mobile login với JWT-protected Chat và Order APIs.
+- Hoàn thiện loyalty, voucher, delivery details, quote, confirmation token, tạo order từ chat và đọc chi tiết order qua REST.
+- Tích hợp Whisper transcription cho voice note; voice và text cùng dùng conversation pipeline/state.
+- Nối Mobile Cart Card với data API trả về và order status với `GET /api/orders/{order_id}`.
+- **Checkpoint giờ 14:** Mobile App gửi được text và voice, hiển thị transcript/cart trực quan, tạo order sau xác nhận và xem trạng thái order của user.
 
-### Giờ 14–20: đánh giá và hardening
+### Giờ 14–20: hardening và diễn tập nghiệp vụ
 
-- Chạy bộ tối thiểu 60 utterances tiếng Anh cho menu, cart, voucher, loyalty, OTP, confirmation và handoff.
-- Sửa lỗi tool selection, argument extraction, item ambiguity và mất state.
-- Kiểm tra webhook replay, OpenAI timeout, voucher hết hạn, OTP sai, cart rỗng và tạo đơn hai lần.
-- Hoàn thiện metrics dashboard và dữ liệu demo.
-- Chỉ bắt đầu voice-note transcription sau khi toàn bộ critical path đạt acceptance criteria.
+- Xử lý refresh token hết hạn, logout, token không hợp lệ, session không thuộc user, retry Chat/Order và mất mạng.
+- Kiểm tra audio permission bị từ chối, file voice không hợp lệ hoặc quá lớn, transcription timeout và fallback text.
+- Kiểm tra quote hết hạn, duplicate `idempotency_key`, user truy cập order người khác, order transition sai và hủy order không hợp lệ.
+- Hoàn thiện handoff summary, audit log đã che PII, dữ liệu demo và admin status endpoint.
 
-### Giờ 20–24: đóng băng và diễn tập
+### Giờ 20–24: đóng băng và demo
 
-- Giờ 20–22: chạy full regression trên URL deploy và hai tài khoản/test session độc lập.
-- Giờ 22: feature freeze; chỉ sửa lỗi làm hỏng demo.
-- Giờ 22–23: diễn tập demo chính, demo lỗi và handoff.
-- Giờ 23–24: backup database seed, environment checklist, video/screenshot fallback và bản trình bày kiến trúc.
-
-## 5. Kiểm thử và tiêu chí nghiệm thu
-
-### Kịch bản bắt buộc
-
-- Search for menu items using natural English, abbreviations, misspellings, and approximate names.
-- Món không tồn tại hoặc có nhiều kết quả.
-- Thêm, đổi số lượng, modifier và xóa món.
-- Voucher hợp lệ, không hợp lệ, hết hạn và không đủ điều kiện.
-- OTP đúng, sai và yêu cầu loyalty trước khi xác minh.
-- Quote được tính lại sau khi giỏ hàng thay đổi.
-- Tạo đơn chỉ sau xác nhận rõ ràng.
-- Replay cùng webhook hoặc idempotency key chỉ tạo một đơn.
-- OpenAI hoặc mock API timeout dẫn đến retry an toàn/handoff.
-- Người dùng yêu cầu nhân viên giữa chừng mà không mất giỏ hàng.
-
-### Success metrics
-
-- Order completion: số phiên tạo đơn thành công / số phiên đã thêm món, mục tiêu ≥ 80% trên scripted runs.
-- Voucher application correctness: 100% trên deterministic test cases.
-- Loyalty inquiry success: 100% sau OTP hợp lệ.
-- Tool-selection accuracy: ≥ 90% trên bộ 60 utterances.
-- Critical slot accuracy: ≥ 85% cho item, quantity, voucher code và phone.
-- Duplicate order rate: 0% khi replay event.
-- P95 end-to-end response time: dưới 8 giây trên 30 lượt demo.
-- Báo cáo `order_count` và `completion_rate` tách theo `mobile` và `messenger`.
-
-## 6. Bảo mật và giới hạn MVP
-
-- Secrets chỉ nằm trong environment variables; không commit API key, page token hoặc app secret.
-- Bắt buộc kiểm tra chữ ký webhook, rate limit theo session và giới hạn kích thước input.
-- Che số điện thoại, địa chỉ, token và OTP trong log.
-- Prompt injection không thể vượt qua tool whitelist và validation của backend.
-- Thanh toán thật, Zalo, API KFC thật, production HA, store release, và App Review nằm ngoài MVP.
-- Checkout dùng phương thức thanh toán giả lập/COD và tạo đơn mock.
-- Voice là stretch goal: chỉ nhận voice note, chuyển thành text rồi đưa qua pipeline hiện hữu; không xây voice agent riêng.
-- React Native mobile app là demo channel bắt buộc. Nếu Messenger chưa sẵn sàng
-  trước giờ 14, tiếp tục demo hoàn toàn trên mobile app; kiến trúc và application
-  core không thay đổi.
+- Chạy regression trên Android và iOS mục tiêu với hai user/device độc lập.
+- Giờ 22: feature freeze; chỉ sửa lỗi làm hỏng login, chat, voice, cart, order hoặc demo.
+- Diễn tập luồng đăng nhập → text/voice order → voucher → xác nhận → theo dõi/hủy đơn; chuẩn bị build/simulator recording fallback.
